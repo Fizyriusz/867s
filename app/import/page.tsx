@@ -5,28 +5,29 @@ import { supabase } from '@/utils/supabase'
 
 export default function ImportPage() {
   const [jsonInput, setJsonInput] = useState('')
+  // Domyślnie ustawiamy dzisiejszą datę w formacie YYYY-MM-DD
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [logs, setLogs] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
   const handleImport = async () => {
     setIsProcessing(true)
-    setLogs([]) // Czyść logi
+    setLogs([]) 
     
     try {
-      // 1. Próba odczytania JSON-a
       const data = JSON.parse(jsonInput)
       if (!Array.isArray(data)) throw new Error('To nie jest lista (tablica)!')
 
+      addLog(`📅 Data importu ustawiona na: ${selectedDate}`)
       addLog(`🔍 Znaleziono ${data.length} sojuszy do przetworzenia...`)
 
       for (const item of data) {
-        // Walidacja danych
         if (!item.tag || !item.power) {
           addLog(`⚠️ Pomijam błędny wpis: ${JSON.stringify(item)}`)
           continue
         }
 
-        // 2. Sprawdź czy sojusz już jest w bazie (szukamy po TAGu)
+        // 1. Znajdź lub stwórz sojusz
         let allianceId = null
         
         const { data: existing } = await supabase
@@ -37,15 +38,13 @@ export default function ImportPage() {
 
         if (existing) {
           allianceId = existing.id
-          addLog(`✅ Sojusz ${item.tag} istnieje (ID: ${allianceId}).`)
         } else {
-          // 3. Jak nie ma, to tworzymy nowy
           const { data: created, error: createError } = await supabase
             .from('alliances')
             .insert({ 
               tag: item.tag, 
               name: item.name || 'Unknown', 
-              status: 'TARGET' // Domyślny status dla nowych
+              status: 'TARGET' 
             })
             .select()
             .single()
@@ -54,25 +53,42 @@ export default function ImportPage() {
             addLog(`❌ Błąd tworzenia sojuszu ${item.tag}: ${createError.message}`)
             continue
           }
-          
           allianceId = created.id
-          addLog(`🆕 Utworzono nowy sojusz: ${item.tag} (ID: ${allianceId})`)
+          addLog(`🆕 Utworzono nowy sojusz: ${item.tag}`)
         }
 
-        // 4. Dodajemy wpis do historii mocy (Snapshot)
+        // 2. Dodaj Snapshot z WYBRANĄ DATĄ
         if (allianceId) {
-          const { error: snapError } = await supabase
+          // Najpierw sprawdzamy, czy nie ma już wpisu dla tego sojuszu z tą datą (żeby nie dublować)
+          const { data: existingSnap } = await supabase
             .from('alliance_snapshots')
-            .insert({
-              alliance_id: allianceId,
-              total_power: item.power
-              // recorded_at wstawi się sam jako dzisiejsza data (z bazy)
-            })
+            .select('id')
+            .eq('alliance_id', allianceId)
+            .eq('recorded_at', selectedDate)
+            .single()
 
-          if (snapError) {
-            addLog(`❌ Błąd zapisu mocy dla ${item.tag}: ${snapError.message}`)
+          if (existingSnap) {
+            // Jeśli jest wpis z tą datą -> aktualizujemy go (nadpisujemy)
+            const { error: updateError } = await supabase
+              .from('alliance_snapshots')
+              .update({ total_power: item.power })
+              .eq('id', existingSnap.id)
+
+            if (updateError) addLog(`❌ Błąd aktualizacji ${item.tag}: ${updateError.message}`)
+            else addLog(`🔄 Zaktualizowano wpis z dnia ${selectedDate} dla ${item.tag}`)
+            
           } else {
-            addLog(`📈 Zapisano moc dla ${item.tag}: ${item.power.toLocaleString()}`)
+            // Jeśli nie ma -> tworzymy nowy
+            const { error: insertError } = await supabase
+              .from('alliance_snapshots')
+              .insert({
+                alliance_id: allianceId,
+                total_power: item.power,
+                recorded_at: selectedDate // <--- TU JEST KLUCZOWA ZMIANA
+              })
+
+            if (insertError) addLog(`❌ Błąd zapisu mocy dla ${item.tag}: ${insertError.message}`)
+            else addLog(`📈 Dodano historię z dnia ${selectedDate} dla ${item.tag}`)
           }
         }
       }
@@ -80,7 +96,7 @@ export default function ImportPage() {
       addLog('🏁 Zakończono import!')
 
     } catch (e: any) {
-      addLog(`🔥 BŁĄD KRYTYCZNY: ${e.message}`)
+      addLog(`🔥 BŁĄD: ${e.message}`)
     } finally {
       setIsProcessing(false)
     }
@@ -91,12 +107,29 @@ export default function ImportPage() {
   return (
     <main className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0] p-8 font-sans">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-6">Import Danych (JSON)</h1>
+        <h1 className="text-3xl font-bold text-white mb-6">Import Danych Historycznych</h1>
         
         <div className="space-y-4">
+          
+          {/* NOWE POLE: WYBÓR DATY */}
+          <div className="bg-[#252525] p-4 rounded border border-gray-700">
+            <label className="block text-sm text-gray-400 mb-2 font-bold uppercase tracking-wider">
+              1. Wybierz datę zrzutu ekranu
+            </label>
+            <input 
+              type="date" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-[#333] text-white p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 w-full md:w-auto"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              Jeśli importujesz stare zdjęcia, ustaw datę wykonania zrzutu ekranu.
+            </p>
+          </div>
+
           <div>
-            <label className="block text-sm text-gray-400 mb-2">
-              Wklej tutaj JSON wygenerowany przez AI:
+            <label className="block text-sm text-gray-400 mb-2 font-bold uppercase tracking-wider">
+              2. Wklej JSON z AI
             </label>
             <textarea
               className="w-full h-64 bg-[#252525] border border-gray-700 rounded p-4 text-sm font-mono text-green-400 focus:outline-none focus:border-blue-500"
@@ -118,11 +151,9 @@ export default function ImportPage() {
             {isProcessing ? 'Przetwarzanie...' : '🚀 IMPORTUJ DANE'}
           </button>
 
-          {/* Konsola Logów */}
           <div className="bg-black/50 rounded border border-gray-800 p-4 h-64 overflow-y-auto font-mono text-xs">
-            {logs.length === 0 && <span className="text-gray-600">Oczekiwanie na działania...</span>}
             {logs.map((log, i) => (
-              <div key={i} className="mb-1 border-b border-gray-900/50 pb-1 last:border-0">
+              <div key={i} className="mb-1 border-b border-gray-900/50 pb-1 last:border-0 text-gray-300">
                 {log}
               </div>
             ))}

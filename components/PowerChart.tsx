@@ -56,7 +56,7 @@ export default function PowerChart({ data }: { data: ChartData[] }) {
             width={60}
           />
           
-<Tooltip 
+        <Tooltip 
             contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '8px' }}
             itemStyle={{ color: '#4ade80' }}
             // ZMIANA TUTAJ: (value: any) naprawi błąd typowania
