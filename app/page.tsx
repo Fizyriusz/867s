@@ -1,6 +1,8 @@
 import { supabase } from '@/utils/supabase'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 // Typy danych
 type Alliance = {
   id: number
