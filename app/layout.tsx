@@ -1,46 +1,31 @@
-'use client'
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { translations, Lang } from '@/utils/translations'
+// Upewnij się, że ta ścieżka pasuje do Twojej struktury folderów
+// Jeśli folder context jest w app/context, to ta ścieżka jest OK:
+import { LanguageProvider } from '@/app/context/LanguageContext'
 
-type LanguageContextType = {
-  lang: Lang
-  setLang: (lang: Lang) => void
-  t: (key: string) => string
-}
+const inter = Inter({ subsets: ["latin"] });
 
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
+export const metadata: Metadata = {
+  title: "867's HQ",
+  description: "Centrum dowodzenia",
+};
 
-export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Domyślnie PL
-  const [lang, setLangState] = useState<Lang>('pl')
-
-  // Zapamiętywanie wyboru w przeglądarce
-  useEffect(() => {
-    const saved = localStorage.getItem('app-lang') as Lang
-    if (saved) setLangState(saved)
-  }, [])
-
-  const setLang = (newLang: Lang) => {
-    setLangState(newLang)
-    localStorage.setItem('app-lang', newLang)
-  }
-
-  // Funkcja tłumacząca: t('app.title') -> "867's HQ"
-  const t = (key: string) => {
-    // @ts-ignore
-    return translations[lang][key] || key 
-  }
-
+// 👇 TUTAJ BYŁ BŁĄD. Musi być "export default function"
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
-      {children}
-    </LanguageContext.Provider>
-  )
-}
-
-export const useLanguage = () => {
-  const context = useContext(LanguageContext)
-  if (!context) throw new Error('useLanguage must be used within a LanguageProvider')
-  return context
+    <html lang="pl">
+      <body className={inter.className}>
+        <LanguageProvider>
+          {children}
+        </LanguageProvider>
+      </body>
+    </html>
+  );
 }
