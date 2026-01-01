@@ -10,6 +10,7 @@ type Snapshot = {
   alliance_id: number; total_power: number; recorded_at: string
 }
 
+// Funkcja formatująca zmiany (np. +1.5M)
 const formatDiff = (val: number) => {
   if (val === 0) return '-'
   const sign = val > 0 ? '+' : ''
@@ -25,30 +26,71 @@ const formatPower = (val: number) => {
   return val.toLocaleString()
 }
 
+// Helper: Znajdź snapshot sprzed X dni (z tolerancją +/- 1 dzień)
+const findPastSnapshot = (history: Snapshot[], currentDateStr: string, daysBack: number) => {
+  const targetDate = new Date(currentDateStr)
+  targetDate.setDate(targetDate.getDate() - daysBack)
+  
+  // Zakres szukania: od (target - 1 dzień) do (target + 1 dzień)
+  const minDate = new Date(targetDate); minDate.setDate(minDate.getDate() - 1);
+  const maxDate = new Date(targetDate); maxDate.setDate(maxDate.getDate() + 1);
+
+  return history.find(snap => {
+    const snapDate = new Date(snap.recorded_at)
+    return snapDate >= minDate && snapDate <= maxDate
+  })
+}
+
 export default function DashboardTable({ alliances, snapshots }: { alliances: Alliance[], snapshots: Snapshot[] }) {
-  // Domyślnie ustawiamy datę na najnowszą znalezioną w bazie (lub dzisiejszą)
-  const availableDates = Array.from(new Set(snapshots.map(s => s.recorded_at))).sort().reverse()
+  // 1. Wyciągamy unikalne daty, w których mamy jakiekolwiek dane
+  const availableDates = Array.from(new Set(snapshots.map(s => s.recorded_at)))
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime()) // Sortowanie od najnowszej
+
+  // Domyślna data to najnowsza dostępna
   const [viewDate, setViewDate] = useState(availableDates[0] || new Date().toISOString().split('T')[0])
 
   return (
     <div>
-      {/* Pasek Kontrolny */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-[#252525] p-4 rounded-lg border border-gray-800">
-        <div className="flex items-center gap-4">
-            <span className="text-gray-400 text-sm font-bold uppercase tracking-wider">Podgląd z dnia:</span>
-            <input 
-              type="date" 
-              value={viewDate} 
-              onChange={(e) => setViewDate(e.target.value)}
-              className="bg-[#333] text-white p-2 rounded border border-gray-600 focus:border-blue-500 font-mono"
-            />
+      {/* --- PANEL KONTROLNY --- */}
+      <div className="bg-[#252525] p-4 rounded-lg border border-gray-800 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <div className="flex items-center gap-4">
+              <span className="text-gray-400 text-sm font-bold uppercase tracking-wider">Data Raportu:</span>
+              <input 
+                type="date" 
+                value={viewDate} 
+                onChange={(e) => setViewDate(e.target.value)}
+                className="bg-[#333] text-white p-2 rounded border border-gray-600 focus:border-blue-500 font-mono"
+              />
+          </div>
+          <div className="text-xs text-gray-500">
+            Wybierz datę, aby zobaczyć stan mocy z przeszłości.
+          </div>
         </div>
-        <div className="text-xs text-gray-500">
-          Zmieniając datę, zobaczysz stan mocy sojuszy w tamtym momencie.
+
+        {/* Lista dostępnych snapshotów (Szybki wybór) */}
+        <div>
+          <p className="text-xs text-gray-500 uppercase font-bold mb-2">Dostępne dni w bazie:</p>
+          <div className="flex flex-wrap gap-2">
+            {availableDates.map(date => (
+              <button
+                key={date}
+                onClick={() => setViewDate(date)}
+                className={`px-3 py-1 rounded text-xs font-mono transition-all border ${
+                  viewDate === date 
+                    ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]' 
+                    : 'bg-[#333] text-gray-400 border-gray-600 hover:bg-[#444] hover:text-gray-200'
+                }`}
+              >
+                {new Date(date).toLocaleDateString('pl-PL')}
+              </button>
+            ))}
+            {availableDates.length === 0 && <span className="text-gray-600 text-xs italic">Brak danych. Zaimportuj coś!</span>}
+          </div>
         </div>
       </div>
 
-      {/* Tabela */}
+      {/* --- TABELA GŁÓWNA --- */}
       <div className="bg-[#252525] rounded-xl shadow-lg overflow-hidden border border-gray-800">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -57,38 +99,39 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 <th className="p-4 w-16 text-center">Tag</th>
                 <th className="p-4">Nazwa Sojuszu</th>
                 <th className="p-4 text-right">Moc ({new Date(viewDate).toLocaleDateString('pl-PL')})</th>
-                <th className="p-4 text-right text-gray-400">24h Δ</th>
-                <th className="p-4 text-right text-gray-400">7d Δ</th>
+                <th className="p-4 text-right text-gray-400" title="Zmiana względem poprzedniego wpisu (często 24h)">Δ Ost.</th>
+                <th className="p-4 text-right text-gray-400" title="Zmiana z 7 dni (+/- 1 dzień)">Δ 7D</th>
+                <th className="p-4 text-right text-gray-400" title="Zmiana z 30 dni (+/- 1 dzień)">Δ 30D</th>
                 <th className="p-4 text-center">Status</th>
-                <th className="p-4 text-gray-500">Uwagi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700 text-sm">
               {alliances.map((alliance) => {
-                // Pobieramy historię tylko dla tego sojuszu
+                // Filtrujemy historię tylko dla tego sojuszu
                 const history = snapshots
                   .filter(s => s.alliance_id === alliance.id)
                   .sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime())
 
-                // Szukamy wpisu dla WYBRANEJ daty
+                // 1. Wpis AKTUALNY (dla wybranej daty)
                 const currentEntry = history.find(s => s.recorded_at === viewDate)
                 
-                // Jeśli nie ma wpisu z tego dnia, sojusz nie istnieje w widoku
+                // Jeśli sojusz nie istniał w wybranym dniu -> pomijamy go (lub pokazujemy pusty)
                 if (!currentEntry) return null 
 
-                // Szukamy wpisów do porównania (poprzedni dostępny przed wybraną datą)
+                // 2. Wpis POPRZEDNI (bezpośrednio przed wybraną datą - zazwyczaj 24h)
                 const currentIndex = history.indexOf(currentEntry)
-                const prevEntry = history[currentIndex - 1] // Dzień wcześniej (lub poprzedni wpis)
-                
-                // Szukamy wpisu sprzed ok 7 dni
-                const weekAgoDate = new Date(viewDate)
-                weekAgoDate.setDate(weekAgoDate.getDate() - 7)
-                const weekAgoString = weekAgoDate.toISOString().split('T')[0]
-                // Znajdź wpis najbliższy dacie tydzień temu (ale nie nowszy niż viewDate)
-                const weekAgoEntry = history.find(s => s.recorded_at === weekAgoString) || history[currentIndex - 7]
+                const prevEntry = history[currentIndex - 1] 
 
-                const diff24h = prevEntry ? currentEntry.total_power - prevEntry.total_power : 0
-                const diff7d = weekAgoEntry ? currentEntry.total_power - weekAgoEntry.total_power : 0
+                // 3. Wpis 7 DNI TEMU (tolerancja +/- 1 dzień)
+                const entry7d = findPastSnapshot(history, viewDate, 7)
+
+                // 4. Wpis 30 DNI TEMU (tolerancja +/- 1 dzień)
+                const entry30d = findPastSnapshot(history, viewDate, 30)
+
+                // Obliczenia różnic
+                const diffPrev = prevEntry ? currentEntry.total_power - prevEntry.total_power : 0
+                const diff7d = entry7d ? currentEntry.total_power - entry7d.total_power : 0
+                const diff30d = entry30d ? currentEntry.total_power - entry30d.total_power : 0
 
                 return (
                   <tr key={alliance.id} className="hover:bg-[#2a2a2a] transition-colors">
@@ -101,12 +144,22 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                     <td className="p-4 text-right font-mono text-gray-200 font-bold">
                       {formatPower(currentEntry.total_power)}
                     </td>
-                    <td className={`p-4 text-right font-mono font-bold ${diff24h > 0 ? 'text-green-400' : diff24h < 0 ? 'text-red-400' : 'text-gray-600'}`}>
-                      {prevEntry ? formatDiff(diff24h) : <span className="text-gray-700 text-xs">n/a</span>}
+
+                    {/* ZMIANA OSTATNIA (np. 24h) */}
+                    <td className={`p-4 text-right font-mono font-bold ${diffPrev > 0 ? 'text-green-400' : diffPrev < 0 ? 'text-red-400' : 'text-gray-600'}`}>
+                      {prevEntry ? formatDiff(diffPrev) : <span className="text-gray-700 text-xs">n/a</span>}
                     </td>
+
+                    {/* ZMIANA 7D */}
                     <td className={`p-4 text-right font-mono font-bold ${diff7d > 0 ? 'text-green-400' : diff7d < 0 ? 'text-red-400' : 'text-gray-600'}`}>
-                      {weekAgoEntry ? formatDiff(diff7d) : <span className="text-gray-700 text-xs">n/a</span>}
+                      {entry7d ? formatDiff(diff7d) : <span className="text-gray-700 text-xs">n/a</span>}
                     </td>
+
+                    {/* ZMIANA 30D */}
+                    <td className={`p-4 text-right font-mono font-bold ${diff30d > 0 ? 'text-green-400' : diff30d < 0 ? 'text-red-400' : 'text-gray-600'}`}>
+                      {entry30d ? formatDiff(diff30d) : <span className="text-gray-700 text-xs">n/a</span>}
+                    </td>
+
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded text-xs font-bold border ${
                         alliance.status === 'TARGET' ? 'bg-green-900/20 text-green-400 border-green-900' : 
@@ -114,13 +167,12 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                         'bg-gray-800 text-gray-400 border-gray-700'
                       }`}>{alliance.status}</span>
                     </td>
-                    <td className="p-4 text-xs text-gray-500 italic truncate max-w-[150px]">{alliance.notes}</td>
                   </tr>
                 )
               })}
-              {/* Jeśli wybrana data nie ma żadnych danych */}
+              
               {snapshots.filter(s => s.recorded_at === viewDate).length === 0 && (
-                 <tr><td colSpan={7} className="p-8 text-center text-gray-500">Brak danych dla wybranej daty ({viewDate}).</td></tr>
+                 <tr><td colSpan={7} className="p-8 text-center text-gray-500">Brak danych dla wybranej daty ({viewDate}). Wybierz inną datę z listy powyżej.</td></tr>
               )}
             </tbody>
           </table>
