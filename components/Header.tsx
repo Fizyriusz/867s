@@ -9,8 +9,6 @@ export default function Header() {
   const pathname = usePathname()
 
   // --- MATEMATYKA DNIA SERWERA ---
-  // Ustawiamy datę startu tak, aby 1.01.2026 był dniem 134.
-  // Wynika z tego, że start to 21 Sierpnia 2025.
   const SERVER_START_DATE = new Date('2025-08-21')
   const today = new Date()
   const diffTime = Math.abs(today.getTime() - SERVER_START_DATE.getTime())
@@ -30,6 +28,7 @@ export default function Header() {
       </Link>
       
       <div className="flex flex-wrap gap-2 items-center justify-center">
+        {/* 1. Przełącznik Języka */}
         <button 
           onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')}
           className="bg-[#333] hover:bg-[#444] text-white px-3 py-2 rounded font-mono text-sm border border-gray-600 transition-colors mr-2"
@@ -37,25 +36,21 @@ export default function Header() {
           {lang === 'pl' ? '🇬🇧 EN' : '🇵🇱 PL'}
         </button>
 
+        {/* 2. Przycisk DASHBOARD (Pokaż tylko jeśli NIE jesteśmy na głównej) */}
         {pathname !== '/' && (
           <Link href="/" className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
             <span>🏠</span> Dashboard
           </Link>
         )}
 
+        {/* 3. Przycisk TIMELINE (Ukryj jeśli jesteśmy na timeline) */}
         {pathname !== '/timeline' && (
             <Link href="/timeline" className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
             <span>📅</span> {t('nav.timeline')}
             </Link>
         )}
 
-        {pathname !== '/import' && (
-            <Link href="/import" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
-            <span>📥</span> {t('nav.import')}
-            </Link>
-        )}
-
-        {/* NOWY LINK: ROADMAP */}
+        {/* 4. Przycisk ROADMAP (Ukryj jeśli jesteśmy na roadmap) */}
         {pathname !== '/roadmap' && (
             <Link 
             href="/roadmap" 
@@ -65,8 +60,8 @@ export default function Header() {
             <span>📜</span>
             </Link>
         )}
-        
-        {/* Przycisk IMPORT (ostatni) */}
+
+        {/* 5. Przycisk IMPORT (Ukryj jeśli jesteśmy na imporcie) */}
         {pathname !== '/import' && (
             <Link href="/import" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
             <span>📥</span> {t('nav.import')}
