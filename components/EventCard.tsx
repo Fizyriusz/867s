@@ -10,17 +10,34 @@ type Alliance = { id: number; tag: string; name: string }
 export default function EventCard({ event, snapshots, alliances }: { event: any, snapshots: Snapshot[], alliances: Alliance[] }) {
   const router = useRouter()
   const [showReport, setShowReport] = useState(false)
-  
-  // Tryb edycji
   const [isEditing, setIsEditing] = useState(false)
+  const [isMasterEditing, setIsMasterEditing] = useState(false)
+
+  // Wykrywanie numeru KvK
+  const kvkMatch = event.title.match(/KvK #(\d+)/)
+  const isKvkEvent = !!kvkMatch
+  const kvkNumber = kvkMatch ? kvkMatch[1] : null
+
+  // Sprawdzanie czy event TRWA TERAZ
+  const today = new Date().toISOString().split('T')[0]
+  const isPast = today > event.end_date
+  const isCurrent = today >= event.start_date && today <= event.end_date
+
+  // --- STANY FORMULARZY ---
   const [formData, setFormData] = useState({
     title: event.title,
-    opponent: event.opponent || '',
     start_date: event.start_date,
     end_date: event.end_date,
     description: event.description || '',
-    prep_result: event.prep_result || '', // 'WIN', 'LOSS'
-    war_result: event.war_result || ''    // 'VICTORY', 'DEFEAT'
+    opponent: event.opponent || '',
+    prep_result: event.prep_result || '',
+    war_result: event.war_result || ''
+  })
+
+  const [masterData, setMasterData] = useState({
+    opponent: event.opponent || '',
+    prep_result: event.prep_result || '',
+    war_result: event.war_result || ''
   })
 
   // Style
@@ -33,7 +50,7 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
     }
   }
 
-  // --- OBLICZANIE BOOSTU ---
+  // --- MATEMATYKA RAPORTU ---
   const calculateReport = () => {
     const startWindow = [event.start_date, new Date(new Date(event.start_date).getTime() - 86400000).toISOString().split('T')[0]]
     const endWindow = [event.end_date, new Date(new Date(event.end_date).getTime() + 86400000).toISOString().split('T')[0]]
@@ -47,66 +64,83 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
   }
   const report = showReport ? calculateReport() : []
 
-  // --- LOGIKA EDYCJI I USUWANIA ---
+  // --- UPDATE ---
   const handleUpdate = async () => {
     const { error } = await supabase.from('game_events').update(formData).eq('id', event.id)
     if (error) alert('Błąd zapisu!')
     else { setIsEditing(false); router.refresh(); }
   }
 
+  const handleMasterUpdate = async () => {
+    if (!kvkNumber) return
+    const prefix = `KvK #${kvkNumber}`
+    try {
+      await supabase.from('game_events').update({ opponent: masterData.opponent }).ilike('title', `${prefix}%`)
+      await supabase.from('game_events').update({ prep_result: masterData.prep_result }).eq('title', `${prefix}: Prep Phase`)
+      await supabase.from('game_events').update({ war_result: masterData.war_result }).eq('title', `${prefix}: WAR`)
+      setIsMasterEditing(false); router.refresh()
+    } catch (e) { alert('Błąd aktualizacji zbiorczej') }
+  }
+
   const handleDelete = async () => {
-    if (!confirm('Czy na pewno chcesz usunąć to wydarzenie?')) return
+    if (!confirm('Usunąć?')) return
     const { error } = await supabase.from('game_events').delete().eq('id', event.id)
-    if (error) alert('Błąd usuwania!')
+    if (error) alert('Błąd!')
     else router.refresh()
   }
 
-  // Helpery do wyświetlania wyników
-  const isWar = event.event_type === 'KVK_WAR'
-  const isPrep = event.event_type === 'KVK' && event.title.includes('Prep')
-
   return (
     <div className="relative pl-8 md:pl-12 group">
-      {/* Kropka na osi */}
-      <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 bg-[#1a1a1a] z-10 ${isEditing ? 'border-yellow-500' : 'border-gray-600'}`} />
+      {/* Kropka na osi (Pulsuje jeśli aktywne) */}
+      <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 bg-[#1a1a1a] z-10 
+        ${isCurrent ? 'border-green-500 bg-green-500 shadow-[0_0_15px_#22c55e] animate-pulse' : 
+          (isEditing || isMasterEditing) ? 'border-yellow-500' : 'border-gray-600'}`} 
+      />
 
-      {/* --- TRYB EDYCJI --- */}
-      {isEditing ? (
+      {/* --- TRYB MASTER EDIT --- */}
+      {isMasterEditing ? (
+        <div className="p-5 rounded-lg border-2 border-purple-500 bg-[#222] shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+          <h3 className="text-purple-400 font-bold mb-4 uppercase text-sm tracking-wider">
+            ⚙️ Zarządzanie KvK #{kvkNumber}
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-gray-500 uppercase font-bold">Przeciwnik (Królestwo)</label>
+              <input placeholder="np. Kingdom #1337" className="w-full bg-[#333] p-2 rounded border border-gray-600 text-white"
+                value={masterData.opponent} onChange={e => setMasterData({...masterData, opponent: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div>
+                  <label className="text-xs text-gray-500 uppercase font-bold">Wynik Prep Phase</label>
+                  <select className="w-full bg-[#333] p-2 rounded border border-gray-600 text-white text-sm"
+                    value={masterData.prep_result} onChange={e => setMasterData({...masterData, prep_result: e.target.value})}>
+                    <option value="">-- Wybierz --</option><option value="WIN">🏆 Wygrana</option><option value="LOSS">🛡️ Przegrana</option>
+                  </select>
+               </div>
+               <div>
+                  <label className="text-xs text-gray-500 uppercase font-bold">Wynik Wojny</label>
+                  <select className="w-full bg-[#333] p-2 rounded border border-gray-600 text-white text-sm"
+                    value={masterData.war_result} onChange={e => setMasterData({...masterData, war_result: e.target.value})}>
+                     <option value="">-- Wybierz --</option><option value="VICTORY">✅ Zwycięstwo</option><option value="DEFEAT">❌ Porażka</option>
+                  </select>
+               </div>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-gray-700">
+            <button onClick={() => setIsMasterEditing(false)} className="px-3 py-1 bg-gray-700 text-white text-xs rounded">Anuluj</button>
+            <button onClick={handleMasterUpdate} className="px-4 py-1 bg-purple-600 text-white text-xs font-bold rounded">ZAPISZ</button>
+          </div>
+        </div>
+      ) : isEditing ? (
+        /* --- TRYB ZWYKŁEJ EDYCJI --- */
         <div className="p-5 rounded-lg border-2 border-yellow-600 bg-[#222]">
           <input className="w-full bg-[#333] mb-2 p-1 text-white font-bold" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-          
           <div className="flex gap-2 mb-2">
             <input type="date" className="bg-[#333] p-1 text-white text-xs" value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})} />
-            <span className="text-gray-400">-</span>
             <input type="date" className="bg-[#333] p-1 text-white text-xs" value={formData.end_date} onChange={e => setFormData({...formData, end_date: e.target.value})} />
           </div>
-
-          {/* EDYCJA SZCZEGÓŁÓW WOJNY */}
-          <div className="bg-black/30 p-2 rounded mb-2 space-y-2">
-            <input placeholder="Nazwa Przeciwnika (np. [ABC])" className="w-full bg-[#333] p-1 text-white text-xs" value={formData.opponent} onChange={e => setFormData({...formData, opponent: e.target.value})} />
-            
-            {/* Wynik Prep Phase */}
-            {isPrep && (
-               <select className="w-full bg-[#333] p-1 text-white text-xs" value={formData.prep_result} onChange={e => setFormData({...formData, prep_result: e.target.value})}>
-                 <option value="">-- Wynik Prep Phase --</option>
-                 <option value="WIN">🏆 Wygrana (Atakujemy)</option>
-                 <option value="LOSS">🛡️ Przegrana (Bronimy się)</option>
-               </select>
-            )}
-
-            {/* Wynik Wojny */}
-            {isWar && (
-               <select className="w-full bg-[#333] p-1 text-white text-xs" value={formData.war_result} onChange={e => setFormData({...formData, war_result: e.target.value})}>
-                 <option value="">-- Wynik Bitwy --</option>
-                 <option value="VICTORY">✅ Zwycięstwo (Zamek zdobyty/obroniony)</option>
-                 <option value="DEFEAT">❌ Porażka (Zamek stracony/niezdobyty)</option>
-               </select>
-            )}
-            
-            <textarea className="w-full bg-[#333] p-1 text-white text-xs" placeholder="Notatki..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-          </div>
-
-          <div className="flex gap-2 justify-end">
+          <textarea className="w-full bg-[#333] p-1 text-white text-xs h-20" placeholder="Notatki..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+          <div className="flex gap-2 justify-end mt-2">
             <button onClick={handleDelete} className="px-3 py-1 bg-red-900 text-red-200 text-xs rounded hover:bg-red-700">🗑️ Usuń</button>
             <button onClick={() => setIsEditing(false)} className="px-3 py-1 bg-gray-700 text-white text-xs rounded">Anuluj</button>
             <button onClick={handleUpdate} className="px-3 py-1 bg-green-700 text-white text-xs rounded hover:bg-green-600">💾 Zapisz</button>
@@ -114,49 +148,62 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
         </div>
       ) : (
         /* --- TRYB PODGLĄDU --- */
-        <div className={`p-5 rounded-lg border-l-4 transition-all ${getEventColor(event.event_type)}`}>
+        <div className={`p-5 rounded-lg border-l-4 transition-all relative overflow-hidden ${getEventColor(event.event_type)} ${isCurrent ? 'ring-2 ring-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.1)]' : ''}`}>
+          
+          {/* BANER: TRWA TERAZ */}
+          {isCurrent && (
+            <div className="absolute top-0 right-0 bg-green-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg shadow-lg animate-pulse">
+              🟢 AKTUALNIE TRWA
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row justify-between md:items-start mb-2">
             <div>
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <h3 className="text-xl font-bold text-white flex items-center flex-wrap gap-2">
                 {event.title}
-                {/* IKONY WYNIKÓW */}
-                {event.prep_result === 'WIN' && <span className="text-xs bg-green-900 text-green-400 px-2 py-0.5 rounded border border-green-700">PREP: WIN</span>}
-                {event.prep_result === 'LOSS' && <span className="text-xs bg-red-900 text-red-400 px-2 py-0.5 rounded border border-red-700">PREP: LOSS</span>}
-                {event.war_result === 'VICTORY' && <span className="text-xs bg-yellow-900 text-yellow-400 px-2 py-0.5 rounded border border-yellow-700">👑 VICTORY</span>}
-                {event.war_result === 'DEFEAT' && <span className="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded border border-gray-500">💀 DEFEAT</span>}
+                {/* WYNIKI */}
+                {event.prep_result === 'WIN' && <span className="text-[10px] bg-green-900 text-green-400 px-1.5 py-0.5 rounded border border-green-700">PREP: WIN</span>}
+                {event.prep_result === 'LOSS' && <span className="text-[10px] bg-red-900 text-red-400 px-1.5 py-0.5 rounded border border-red-700">PREP: LOSS</span>}
+                {event.war_result === 'VICTORY' && <span className="text-[10px] bg-yellow-900 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-700">👑 VICTORY</span>}
+                {event.war_result === 'DEFEAT' && <span className="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded border border-gray-500">💀 DEFEAT</span>}
               </h3>
               
-              {/* Przeciwnik */}
               {event.opponent && (
-                <p className="text-sm font-bold text-gray-300 mt-1">
-                   VS <span className="text-red-400">{event.opponent}</span>
-                   {/* Logika Opisu Sytuacji */}
-                   {event.prep_result === 'WIN' && <span className="text-gray-500 text-xs ml-2 font-normal">(Atakowaliśmy)</span>}
-                   {event.prep_result === 'LOSS' && <span className="text-gray-500 text-xs ml-2 font-normal">(Broniliśmy się)</span>}
+                <p className="text-sm font-bold text-gray-300 mt-1 flex items-center gap-2">
+                   ⚔️ VS <span className="text-red-400 font-mono text-base">{event.opponent}</span>
+                   {event.prep_result === 'WIN' && <span className="text-gray-500 text-xs font-normal">(Atak)</span>}
+                   {event.prep_result === 'LOSS' && <span className="text-gray-500 text-xs font-normal">(Obrona)</span>}
                 </p>
               )}
             </div>
 
             <div className="flex items-center gap-2 mt-2 md:mt-0">
-               <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-white transition-colors" title="Edytuj">✏️</button>
+               {/* PRZYCISK MASTER EDIT - Tylko dla KvK */}
+               {isKvkEvent && (
+                 <button 
+                   onClick={() => setIsMasterEditing(true)} 
+                   className="text-purple-400 hover:text-purple-300 transition-colors bg-purple-900/20 px-2 py-1 rounded text-xs font-bold border border-purple-800"
+                   title="Zarządzaj całym cyklem KvK"
+                 >
+                   ⚙️ KvK #{kvkNumber}
+                 </button>
+               )}
+               <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-white transition-colors" title="Edytuj tylko to">✏️</button>
             </div>
           </div>
           
-          <div className="text-sm font-mono opacity-80 mb-2">
+          <div className={`text-sm font-mono mb-2 ${isCurrent ? 'text-green-400 font-bold' : 'opacity-80'}`}>
             {new Date(event.start_date).toLocaleDateString('pl-PL', {day:'numeric', month:'short'})} — {new Date(event.end_date).toLocaleDateString('pl-PL', {day:'numeric', month:'short'})}
           </div>
-
+          
           <p className="text-sm opacity-90 mb-4 italic">{event.description}</p>
-
-          <button 
-              onClick={() => setShowReport(!showReport)}
-              className="text-xs font-bold uppercase tracking-wider border border-white/20 px-3 py-1 rounded hover:bg-white/10 transition-colors"
-          >
+          
+          <button onClick={() => setShowReport(!showReport)} className="text-xs font-bold uppercase tracking-wider border border-white/20 px-3 py-1 rounded hover:bg-white/10 transition-colors">
               {showReport ? 'ukryj wynik' : '📊 Pokaż wynik (boost)'}
           </button>
-
+          
           {showReport && (
-              <div className="mt-4 bg-black/40 rounded p-4">
+              <div className="mt-4 bg-black/40 rounded p-4 animate-in fade-in zoom-in-95">
                   <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Ranking przyrostu mocy:</h4>
                   {report && report.length > 0 ? (
                       <table className="w-full text-sm">
