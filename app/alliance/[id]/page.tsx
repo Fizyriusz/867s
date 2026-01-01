@@ -1,34 +1,31 @@
 import { supabase } from '@/utils/supabase'
 import PowerChart from '@/components/PowerChart'
+import HistoryList from '@/components/HistoryList' // <--- IMPORTUJEMY NOWY KOMPONENT
 import Link from 'next/link'
 
-// Next.js 15 wymaga, aby params było Promise
 export default async function AlliancePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  // 1. Pobierz dane sojuszu
   const { data: alliance } = await supabase
     .from('alliances')
     .select('*')
     .eq('id', id)
     .single()
 
-  // 2. Pobierz historię mocy (posortowaną od najstarszej)
+  // ZMIANA TUTAJ: Dodaliśmy 'id' do selecta!
   const { data: history } = await supabase
     .from('alliance_snapshots')
-    .select('total_power, recorded_at')
+    .select('id, total_power, recorded_at') 
     .eq('alliance_id', id)
     .order('recorded_at', { ascending: true })
 
   if (!alliance) return <div className="p-10 text-white">Nie znaleziono sojuszu.</div>
 
-  // Formatowanie danych pod wykres
   const chartData = history?.map(entry => ({
     date: new Date(entry.recorded_at).toLocaleDateString('pl-PL', { month: 'short', day: 'numeric' }),
     power: entry.total_power
   })) || []
 
-  // Oblicz zmianę (Ostatni vs Pierwszy z pobranych)
   const latestPower = history?.[history.length - 1]?.total_power || 0
   const startPower = history?.[0]?.total_power || 0
   const diff = latestPower - startPower
@@ -41,7 +38,7 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
           ← Wróć do listy
         </Link>
 
-        {/* Nagłówek z kartą */}
+        {/* Nagłówek */}
         <div className="flex justify-between items-start mb-8 bg-[#252525] p-6 rounded-xl border border-gray-800">
           <div>
             <div className="flex items-center gap-4 mb-2">
@@ -73,6 +70,9 @@ export default async function AlliancePage({ params }: { params: Promise<{ id: s
 
         {/* WYKRES */}
         <PowerChart data={chartData} />
+
+        {/* NOWA TABELA HISTORII Z USUWANIEM */}
+        {history && <HistoryList snapshots={history} />}
 
       </div>
     </main>
