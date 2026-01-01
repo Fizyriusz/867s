@@ -8,7 +8,18 @@ export const translations = {
     "nav.timeline": "Oś Czasu",
     "nav.import": "Zarządzanie / Import",
     "server.age": "Dzień Serwera:", // NOWE
+    "nav.roadmap": "Rozwój / Zmiany",
+
+    // Roadmap Page
+    "roadmap.title": "Plan Rozwoju & Historia",
+    "roadmap.subtitle": "Zobacz, jak rozwija się nasze narzędzie.",
+    "roadmap.section.planned": "🚀 W PLANACH (Roadmap)",
+    "roadmap.section.history": "📜 HISTORIA ZMIAN (Changelog)",
     
+    "roadmap.status.done": "ZROBIONE",
+    "roadmap.status.in_progress": "W TRAKCIE",
+    "roadmap.status.planned": "PLANOWANE",
+
     // Dashboard Tabela
     "dash.col.tag": "Tag",
     "dash.col.name": "Nazwa Sojuszu",
@@ -71,6 +82,17 @@ export const translations = {
     "nav.timeline": "Timeline",
     "nav.import": "Manage / Import",
     "server.age": "Server Day:", // NEW
+    "nav.roadmap": "Roadmap / Changelog",
+
+    // Roadmap Page
+    "roadmap.title": "Development Roadmap",
+    "roadmap.subtitle": "See how our tool evolves.",
+    "roadmap.section.planned": "🚀 PLANNED FEATURES",
+    "roadmap.section.history": "📜 CHANGELOG",
+
+    "roadmap.status.done": "DONE",
+    "roadmap.status.in_progress": "IN PROGRESS",
+    "roadmap.status.planned": "PLANNED",
 
     // Dashboard Table
     "dash.col.tag": "Tag",

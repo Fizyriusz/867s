@@ -54,6 +54,25 @@ export default function Header() {
             <span>📥</span> {t('nav.import')}
             </Link>
         )}
+
+        {/* NOWY LINK: ROADMAP */}
+        {pathname !== '/roadmap' && (
+            <Link 
+            href="/roadmap" 
+            className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2"
+            title={t('nav.roadmap')}
+            >
+            <span>📜</span>
+            </Link>
+        )}
+        
+        {/* Przycisk IMPORT (ostatni) */}
+        {pathname !== '/import' && (
+            <Link href="/import" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
+            <span>📥</span> {t('nav.import')}
+            </Link>
+        )}
+        
       </div>
     </header>
   )
