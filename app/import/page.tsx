@@ -9,6 +9,7 @@ export default function ImportPage() {
   const [deleteDate, setDeleteDate] = useState('')
   const [logs, setLogs] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [kvkNumber, setKvkNumber] = useState('3') // Domyślnie 3
 
   // --- CONFIG GENERATORA EVENTÓW ---
   const [template, setTemplate] = useState('MANUAL') // MANUAL, KVK, BRAWL
@@ -50,49 +51,41 @@ export default function ImportPage() {
     } catch (e: any) { addLog(`🔥 BŁĄD: ${e.message}`) } finally { setIsProcessing(false) }
   }
 
-  // --- LOGIKA 2: GENERATOR EVENTÓW ---
-  const handleGenerateEvents = async () => {
-    if (!startDate) { alert('Wybierz datę startu!'); return }
-    setIsProcessing(true)
+// --- LOGIKA 2: GENERATOR EVENTÓW ---
+const handleGenerateEvents = async () => {
+  if (!startDate) { alert('Wybierz datę startu!'); return }
+  setIsProcessing(true)
+  const eventsToCreate = []
+  const start = new Date(startDate)
+  const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r.toISOString().split('T')[0] }
+  const dateStr = (d: Date) => d.toISOString().split('T')[0]
 
-    const eventsToCreate = []
-    const start = new Date(startDate)
+  try {
+    if (template === 'KVK') {
+      const prefix = `KvK #${kvkNumber}` // <--- TUTAJ UŻYWAMY NUMERU
 
-    // Helper do dodawania dni
-    const addDays = (date: Date, days: number) => {
-      const result = new Date(date); result.setDate(result.getDate() + days);
-      return result.toISOString().split('T')[0]
+      eventsToCreate.push({
+        title: `${prefix}: Matchmaking`,
+        event_type: 'KVK',
+        start_date: dateStr(start),
+        end_date: addDays(start, 1),
+        description: 'Oczekiwanie na przeciwnika.'
+      })
+      eventsToCreate.push({
+        title: `${prefix}: Prep Phase`,
+        event_type: 'KVK',
+        start_date: addDays(start, 2),
+        end_date: addDays(start, 6),
+        description: 'Zbieranie punktów.'
+      })
+      eventsToCreate.push({
+        title: `${prefix}: WAR`,
+        event_type: 'KVK_WAR',
+        start_date: addDays(start, 7),
+        end_date: addDays(start, 7),
+        description: 'Bitwa o Zamek.'
+      })
     }
-    const dateStr = (date: Date) => date.toISOString().split('T')[0]
-
-    try {
-      if (template === 'KVK') {
-        // --- LOGIKA KVK (2 dni Match, 5 dni Prep, 1 dzień War) ---
-        // 1. Matchmaking (Dni 0-1)
-        eventsToCreate.push({
-          title: 'KvK: Matchmaking',
-          event_type: 'KVK',
-          start_date: dateStr(start),
-          end_date: addDays(start, 1),
-          description: 'System dobiera przeciwnika (2 dni).'
-        })
-        // 2. Prep Phase (Dni 2-6)
-        eventsToCreate.push({
-          title: 'KvK: Prep Phase',
-          event_type: 'KVK',
-          start_date: addDays(start, 2),
-          end_date: addDays(start, 6),
-          description: 'Faza przygotowań. Zbieranie punktów (5 dni).'
-        })
-        // 3. War (Dzień 7)
-        eventsToCreate.push({
-          title: 'KvK: WAR',
-          event_type: 'KVK_WAR',
-          start_date: addDays(start, 7),
-          end_date: addDays(start, 7),
-          description: 'Wojna o Zamek (12:00 UTC).'
-        })
-      } 
       else if (template === 'BRAWL') {
         // --- LOGIKA BRAWL (6.5 dnia -> liczymy jako 7 dni kalendarzowych) ---
         eventsToCreate.push({
@@ -152,15 +145,24 @@ export default function ImportPage() {
           <h2 className="text-purple-400 font-bold text-xl mb-4">📅 Kreator Osi Czasu</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Wybór Szablonu */}
-            <div>
-              <label className="text-xs text-gray-400 uppercase font-bold block mb-2">1. Wybierz Rodzaj Wydarzenia</label>
-              <select className="w-full bg-[#333] p-3 rounded border border-gray-600 focus:border-purple-500 text-white font-bold"
-                value={template} onChange={e => setTemplate(e.target.value)}>
-                <option value="MANUAL">Ręczny (Własne daty)</option>
-                <option value="KVK">⚔️ KvK (Pełny cykl: Match - Prep - War)</option>
-                <option value="BRAWL">🏆 Alliance Brawl (Standard)</option>
-              </select>
+{/* Wybór Szablonu */}
+<div>
+  <label className="text-xs text-gray-400 uppercase font-bold block mb-2">1. Wybierz Rodzaj</label>
+  <select className="w-full bg-[#333] p-3 rounded border border-gray-600 text-white font-bold mb-2"
+    value={template} onChange={e => setTemplate(e.target.value)}>
+    <option value="MANUAL">Ręczny</option>
+    <option value="KVK">⚔️ KvK (Pełny cykl)</option>
+    <option value="BRAWL">🏆 Alliance Brawl</option>
+  </select>
+
+  {/* NOWE POLE: NUMER KVK */}
+  {template === 'KVK' && (
+    <div>
+      <label className="text-xs text-purple-400 uppercase font-bold">Numer KvK</label>
+      <input type="number" value={kvkNumber} onChange={e => setKvkNumber(e.target.value)}
+        className="w-20 ml-2 bg-[#222] border border-purple-500 rounded p-1 text-white text-center font-bold" />
+    </div>
+  )}
             </div>
 
             {/* Wybór Daty Startu */}
