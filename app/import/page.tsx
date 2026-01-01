@@ -37,7 +37,7 @@ export default function ImportPage() {
         const { data: existing } = await supabase.from('alliances').select('id').eq('tag', item.tag).single()
         if (existing) allianceId = existing.id
         else {
-          const { data: created } = await supabase.from('alliances').insert({ tag: item.tag, name: item.name || 'Unknown' }).select().single()
+          const { data: created } = await supabase.from('alliances').insert({ tag: item.tag, name: item.name || 'Unknown', status: 'NEUTRAL' }).select().single()
           if (created) allianceId = created.id
         }
         if (allianceId) {

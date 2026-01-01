@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/app/context/LanguageContext'
-import { supabase } from '@/utils/supabase' // Potrzebne do zapisu statusu
+import { supabase } from '@/utils/supabase'
 
 type Alliance = {
   id: number; tag: string; name: string; status: string; notes: string | null
@@ -11,9 +11,6 @@ type Alliance = {
 type Snapshot = {
   alliance_id: number; total_power: number; recorded_at: string
 }
-
-// ... (funkcje formatDiff, formatPower, findPastSnapshot - BEZ ZMIAN) ...
-// (dla oszczędności miejsca wklejam tylko zmiany w komponencie i helpery)
 
 const formatDiff = (val: number) => {
     if (val === 0) return '-'
@@ -48,36 +45,37 @@ const getStatusColor = (status: string) => {
         case 'SKIP': return 'bg-red-900/30 text-red-400 border-red-800 hover:bg-red-900/50'
         case 'ALLY': return 'bg-blue-900/30 text-blue-400 border-blue-800 hover:bg-blue-900/50'
         case 'FARM': return 'bg-yellow-900/30 text-yellow-400 border-yellow-800 hover:bg-yellow-900/50'
-        default: return 'bg-gray-800 text-gray-400 border-gray-700'
+        default: return 'bg-gray-800 text-gray-500 border-gray-700 hover:bg-gray-700' // NEUTRAL (Szary)
     }
 }
 
 export default function DashboardTable({ alliances, snapshots }: { alliances: Alliance[], snapshots: Snapshot[] }) {
   const { t } = useLanguage()
   
-  // Lokalny stan sojuszy (żeby UI odświeżyło się od razu po zmianie statusu)
+  // Lokalny stan sojuszy (żeby UI odświeżyło się od razu)
   const [localAlliances, setLocalAlliances] = useState(alliances)
 
   const availableDates = Array.from(new Set(snapshots.map(s => s.recorded_at)))
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
   const [viewDate, setViewDate] = useState(availableDates[0] || new Date().toISOString().split('T')[0])
 
-  // Funkcja zmiany statusu
+  // --- ZMIANA STATUSU ---
   const handleStatusChange = async (id: number, newStatus: string) => {
-    // 1. Optymistyczna aktualizacja UI (natychmiast)
     setLocalAlliances(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a))
+    await supabase.from('alliances').update({ status: newStatus }).eq('id', id)
+  }
 
-    // 2. Zapis do bazy
-    const { error } = await supabase.from('alliances').update({ status: newStatus }).eq('id', id)
-    if (error) {
-        alert('Błąd zapisu statusu!')
-        // Cofnij zmianę w razie błędu (opcjonalnie)
-    }
+  // --- ZMIANA NOTATKI (Zapisuje przy wyjściu z pola lub Enter) ---
+  const handleNoteSave = async (id: number, newNote: string) => {
+    // 1. Aktualizuj lokalnie (żeby nie skakało)
+    setLocalAlliances(prev => prev.map(a => a.id === id ? { ...a, notes: newNote } : a))
+    // 2. Wyślij do bazy
+    await supabase.from('alliances').update({ notes: newNote }).eq('id', id)
   }
 
   return (
     <div>
-      {/* PANEL KONTROLNY (BEZ ZMIAN) */}
+      {/* PANEL KONTROLNY */}
       <div className="bg-[#252525] p-4 rounded-lg border border-gray-800 mb-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <div className="flex items-center gap-4">
@@ -116,7 +114,7 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_7d')}</th>
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_30d')}</th>
                 <th className="p-4 text-center">{t('dash.col.status')}</th>
-                <th className="p-4 text-gray-500">{t('dash.col.notes')}</th>
+                <th className="p-4 text-gray-500 w-64">{t('dash.col.notes')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700 text-sm">
@@ -133,7 +131,7 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 const diff30d = entry30d ? currentEntry.total_power - entry30d.total_power : 0
 
                 return (
-                  <tr key={alliance.id} className="hover:bg-[#2a2a2a] transition-colors">
+                  <tr key={alliance.id} className="hover:bg-[#2a2a2a] transition-colors group">
                     <td className="p-4 font-mono text-blue-400 font-bold text-center">{alliance.tag}</td>
                     <td className="p-4 font-medium text-white">
                       <Link href={`/alliance/${alliance.id}`} className="hover:text-blue-400 hover:underline">{alliance.name}</Link>
@@ -143,13 +141,14 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                     <td className={`p-4 text-right font-mono font-bold ${diff7d > 0 ? 'text-green-400' : diff7d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry7d ? formatDiff(diff7d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     <td className={`p-4 text-right font-mono font-bold ${diff30d > 0 ? 'text-green-400' : diff30d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry30d ? formatDiff(diff30d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     
-                    {/* ZMIANA STATUSU (SELECT) */}
+                    {/* STATUS SELECT */}
                     <td className="p-4 text-center">
                         <select 
-                            value={alliance.status} 
+                            value={alliance.status || 'NEUTRAL'} 
                             onChange={(e) => handleStatusChange(alliance.id, e.target.value)}
-                            className={`px-2 py-1 rounded text-xs font-bold border appearance-none cursor-pointer focus:outline-none text-center w-full ${getStatusColor(alliance.status)}`}
+                            className={`px-2 py-1 rounded text-xs font-bold border appearance-none cursor-pointer focus:outline-none text-center w-full transition-colors ${getStatusColor(alliance.status || 'NEUTRAL')}`}
                         >
+                            <option value="NEUTRAL" className="bg-[#252525] text-gray-400">—</option>
                             <option value="TARGET" className="bg-[#252525] text-green-400">TARGET</option>
                             <option value="SKIP" className="bg-[#252525] text-red-400">SKIP</option>
                             <option value="ALLY" className="bg-[#252525] text-blue-400">ALLY</option>
@@ -157,7 +156,21 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                         </select>
                     </td>
 
-                    <td className="p-4 text-xs text-gray-500 italic truncate max-w-[150px]">{alliance.notes}</td>
+                    {/* EDYTOWALNE NOTATKI */}
+                    <td className="p-4">
+                        <input 
+                            type="text"
+                            defaultValue={alliance.notes || ''}
+                            placeholder="..."
+                            onBlur={(e) => handleNoteSave(alliance.id, e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.currentTarget.blur() // Powoduje zapis (onBlur) i chowa klawiaturę
+                                }
+                            }}
+                            className="bg-transparent border-b border-transparent hover:border-gray-600 focus:border-blue-500 focus:bg-[#222] outline-none w-full text-xs text-gray-400 placeholder-gray-700 transition-all px-1 py-1 rounded"
+                        />
+                    </td>
                   </tr>
                 )
               })}

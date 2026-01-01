@@ -34,6 +34,7 @@ export const translations = {
     "event.war": "WOJNA",
     
     // Statusy
+    "status.neutral": "—", // Kreska dla neutralnego
     "status.win": "WYGRANA",
     "status.loss": "PRZEGRANA",
     "status.victory": "ZWYCIĘSTWO",
@@ -93,6 +94,7 @@ export const translations = {
     "event.war": "WAR",
 
     // Statuses
+    "status.neutral": "—",
     "status.win": "WIN",
     "status.loss": "LOSS",
     "status.victory": "VICTORY",
