@@ -3,12 +3,17 @@
 import { useState } from 'react'
 import { supabase } from '@/utils/supabase'
 import { useRouter } from 'next/navigation'
+// 👇 POPRAWIONA ŚCIEŻKA IMPORTU
+import { useLanguage } from '@/app/context/LanguageContext'
 
 type Snapshot = { alliance_id: number; total_power: number; recorded_at: string }
 type Alliance = { id: number; tag: string; name: string }
 
 export default function EventCard({ event, snapshots, alliances }: { event: any, snapshots: Snapshot[], alliances: Alliance[] }) {
   const router = useRouter()
+  // 👇 UŻYCIE TŁUMACZEŃ
+  const { t } = useLanguage()
+
   const [showReport, setShowReport] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [isMasterEditing, setIsMasterEditing] = useState(false)
@@ -97,11 +102,11 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
           (isEditing || isMasterEditing) ? 'border-yellow-500' : 'border-gray-600'}`} 
       />
 
-      {/* --- TRYB MASTER EDIT --- */}
+      {/* --- TRYB MASTER EDIT (KVK) --- */}
       {isMasterEditing ? (
         <div className="p-5 rounded-lg border-2 border-purple-500 bg-[#222] shadow-[0_0_15px_rgba(168,85,247,0.3)]">
           <h3 className="text-purple-400 font-bold mb-4 uppercase text-sm tracking-wider">
-            ⚙️ Zarządzanie KvK #{kvkNumber}
+            ⚙️ {t('event.manage')} KvK #{kvkNumber}
           </h3>
           <div className="space-y-4">
             <div>
@@ -111,17 +116,21 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
             </div>
             <div className="grid grid-cols-2 gap-4">
                <div>
-                  <label className="text-xs text-gray-500 uppercase font-bold">Wynik Prep Phase</label>
+                  <label className="text-xs text-gray-500 uppercase font-bold">Wynik Prep</label>
                   <select className="w-full bg-[#333] p-2 rounded border border-gray-600 text-white text-sm"
                     value={masterData.prep_result} onChange={e => setMasterData({...masterData, prep_result: e.target.value})}>
-                    <option value="">-- Wybierz --</option><option value="WIN">🏆 Wygrana</option><option value="LOSS">🛡️ Przegrana</option>
+                    <option value="">-- Wybierz --</option>
+                    <option value="WIN">🏆 {t('status.win')}</option>
+                    <option value="LOSS">🛡️ {t('status.loss')}</option>
                   </select>
                </div>
                <div>
                   <label className="text-xs text-gray-500 uppercase font-bold">Wynik Wojny</label>
                   <select className="w-full bg-[#333] p-2 rounded border border-gray-600 text-white text-sm"
                     value={masterData.war_result} onChange={e => setMasterData({...masterData, war_result: e.target.value})}>
-                     <option value="">-- Wybierz --</option><option value="VICTORY">✅ Zwycięstwo</option><option value="DEFEAT">❌ Porażka</option>
+                     <option value="">-- Wybierz --</option>
+                     <option value="VICTORY">✅ {t('status.victory')}</option>
+                     <option value="DEFEAT">❌ {t('status.defeat')}</option>
                   </select>
                </div>
             </div>
@@ -153,7 +162,7 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
           {/* BANER: TRWA TERAZ */}
           {isCurrent && (
             <div className="absolute top-0 right-0 bg-green-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg shadow-lg animate-pulse">
-              🟢 AKTUALNIE TRWA
+              🟢 {t('event.current')}
             </div>
           )}
 
@@ -162,17 +171,17 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
               <h3 className="text-xl font-bold text-white flex items-center flex-wrap gap-2">
                 {event.title}
                 {/* WYNIKI */}
-                {event.prep_result === 'WIN' && <span className="text-[10px] bg-green-900 text-green-400 px-1.5 py-0.5 rounded border border-green-700">PREP: WIN</span>}
-                {event.prep_result === 'LOSS' && <span className="text-[10px] bg-red-900 text-red-400 px-1.5 py-0.5 rounded border border-red-700">PREP: LOSS</span>}
-                {event.war_result === 'VICTORY' && <span className="text-[10px] bg-yellow-900 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-700">👑 VICTORY</span>}
-                {event.war_result === 'DEFEAT' && <span className="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded border border-gray-500">💀 DEFEAT</span>}
+                {event.prep_result === 'WIN' && <span className="text-[10px] bg-green-900 text-green-400 px-1.5 py-0.5 rounded border border-green-700">{t('event.prep')}: {t('status.win')}</span>}
+                {event.prep_result === 'LOSS' && <span className="text-[10px] bg-red-900 text-red-400 px-1.5 py-0.5 rounded border border-red-700">{t('event.prep')}: {t('status.loss')}</span>}
+                {event.war_result === 'VICTORY' && <span className="text-[10px] bg-yellow-900 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-700">👑 {t('status.victory')}</span>}
+                {event.war_result === 'DEFEAT' && <span className="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded border border-gray-500">💀 {t('status.defeat')}</span>}
               </h3>
               
               {event.opponent && (
                 <p className="text-sm font-bold text-gray-300 mt-1 flex items-center gap-2">
-                   ⚔️ VS <span className="text-red-400 font-mono text-base">{event.opponent}</span>
-                   {event.prep_result === 'WIN' && <span className="text-gray-500 text-xs font-normal">(Atak)</span>}
-                   {event.prep_result === 'LOSS' && <span className="text-gray-500 text-xs font-normal">(Obrona)</span>}
+                   ⚔️ {t('event.vs')} <span className="text-red-400 font-mono text-base">{event.opponent}</span>
+                   {event.prep_result === 'WIN' && <span className="text-gray-500 text-xs font-normal">({t('status.attack')})</span>}
+                   {event.prep_result === 'LOSS' && <span className="text-gray-500 text-xs font-normal">({t('status.defense')})</span>}
                 </p>
               )}
             </div>
@@ -199,12 +208,12 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
           <p className="text-sm opacity-90 mb-4 italic">{event.description}</p>
           
           <button onClick={() => setShowReport(!showReport)} className="text-xs font-bold uppercase tracking-wider border border-white/20 px-3 py-1 rounded hover:bg-white/10 transition-colors">
-              {showReport ? 'ukryj wynik' : '📊 Pokaż wynik (boost)'}
+              {showReport ? t('event.hide_report') : `📊 ${t('event.show_report')}`}
           </button>
           
           {showReport && (
               <div className="mt-4 bg-black/40 rounded p-4 animate-in fade-in zoom-in-95">
-                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Ranking przyrostu mocy:</h4>
+                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">{t('event.ranking')}</h4>
                   {report && report.length > 0 ? (
                       <table className="w-full text-sm">
                           <tbody>
