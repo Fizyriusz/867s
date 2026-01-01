@@ -22,6 +22,9 @@ export const translations = {
     "dash.control.date": "Data Raportu:",
     "dash.control.info": "Wybierz datę, aby zobaczyć stan mocy z przeszłości.",
     "dash.control.available": "Dostępne dni:",
+    "dash.badge.new": "NOWY",
+    "dash.dropouts.title": "📉 Spadli z rankingu (Brak w Top 100)",
+    "dash.dropouts.empty": "Brak zmian. Nikt nie wypadł z rankingu.",
 
     // Timeline / Eventy
     "event.manage": "Zarządzaj",
@@ -82,6 +85,9 @@ export const translations = {
     "dash.control.date": "Report Date:",
     "dash.control.info": "Select a date to view historical power data.",
     "dash.control.available": "Available days:",
+    "dash.badge.new": "NEW",
+    "dash.dropouts.title": "📉 Dropped out (Missing from Top 100)",
+    "dash.dropouts.empty": "No changes. No dropouts detected.",
 
     // Timeline / Events
     "event.manage": "Manage",
