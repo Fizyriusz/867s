@@ -2,11 +2,12 @@ export type Lang = 'pl' | 'en'
 
 export const translations = {
   pl: {
-    // Nagłówek
+    // Nagłówek & Serwer
     "app.title": "867's HQ",
     "app.subtitle": "Dashboard Rekrutacyjny",
     "nav.timeline": "Oś Czasu",
     "nav.import": "Zarządzanie / Import",
+    "server.age": "Dzień Serwera:", // NOWE
     
     // Dashboard Tabela
     "dash.col.tag": "Tag",
@@ -39,13 +40,33 @@ export const translations = {
     "status.defeat": "PORAŻKA",
     "status.attack": "Atak",
     "status.defense": "Obrona",
+
+    // --- NOWE: IMPORT PAGE ---
+    "import.title": "Panel Zarządzania",
+    "import.back": "Wróć do Dashboardu",
+    
+    "import.gen.title": "Kreator Osi Czasu",
+    "import.gen.type": "1. Wybierz Rodzaj",
+    "import.gen.date": "2. Data Startu",
+    "import.gen.btn": "GENERUJ",
+    "import.gen.kvk_num": "Numer KvK",
+    
+    "import.json.title": "Import Danych (JSON)",
+    "import.json.date": "Data Danych:",
+    "import.json.placeholder": "Wklej JSON tutaj...",
+    "import.json.btn": "IMPORTUJ",
+    
+    "import.delete.title": "Strefa Usuwania",
+    "import.delete.label": "Data do usunięcia",
+    "import.delete.btn": "USUŃ DZIEŃ"
   },
   en: {
-    // Header
+    // Header & Server
     "app.title": "867's HQ",
     "app.subtitle": "Recruitment Dashboard",
     "nav.timeline": "Timeline",
     "nav.import": "Manage / Import",
+    "server.age": "Server Day:", // NEW
 
     // Dashboard Table
     "dash.col.tag": "Tag",
@@ -78,5 +99,24 @@ export const translations = {
     "status.defeat": "DEFEAT",
     "status.attack": "Attack",
     "status.defense": "Defense",
+
+    // --- NEW: IMPORT PAGE ---
+    "import.title": "Management Panel",
+    "import.back": "Back to Dashboard",
+    
+    "import.gen.title": "Timeline Creator",
+    "import.gen.type": "1. Select Type",
+    "import.gen.date": "2. Start Date",
+    "import.gen.btn": "GENERATE",
+    "import.gen.kvk_num": "KvK Number",
+    
+    "import.json.title": "Data Import (JSON)",
+    "import.json.date": "Data Date:",
+    "import.json.placeholder": "Paste JSON here...",
+    "import.json.btn": "IMPORT",
+    
+    "import.delete.title": "Danger Zone",
+    "import.delete.label": "Date to delete",
+    "import.delete.btn": "DELETE DAY"
   }
 }
