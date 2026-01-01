@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { supabase } from '@/utils/supabase'
 import { useRouter } from 'next/navigation'
-// 👇 POPRAWIONA ŚCIEŻKA IMPORTU
 import { useLanguage } from '@/app/context/LanguageContext'
 
 type Snapshot = { alliance_id: number; total_power: number; recorded_at: string }
@@ -11,7 +10,6 @@ type Alliance = { id: number; tag: string; name: string }
 
 export default function EventCard({ event, snapshots, alliances }: { event: any, snapshots: Snapshot[], alliances: Alliance[] }) {
   const router = useRouter()
-  // 👇 UŻYCIE TŁUMACZEŃ
   const { t } = useLanguage()
 
   const [showReport, setShowReport] = useState(false)
@@ -25,7 +23,6 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
 
   // Sprawdzanie czy event TRWA TERAZ
   const today = new Date().toISOString().split('T')[0]
-  const isPast = today > event.end_date
   const isCurrent = today >= event.start_date && today <= event.end_date
 
   // --- STANY FORMULARZY ---
@@ -159,7 +156,6 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
         /* --- TRYB PODGLĄDU --- */
         <div className={`p-5 rounded-lg border-l-4 transition-all relative overflow-hidden ${getEventColor(event.event_type)} ${isCurrent ? 'ring-2 ring-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.1)]' : ''}`}>
           
-          {/* BANER: TRWA TERAZ */}
           {isCurrent && (
             <div className="absolute top-0 right-0 bg-green-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg shadow-lg animate-pulse">
               🟢 {t('event.current')}
@@ -187,25 +183,20 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
             </div>
 
             <div className="flex items-center gap-2 mt-2 md:mt-0">
-               {/* PRZYCISK MASTER EDIT - Tylko dla KvK */}
                {isKvkEvent && (
-                 <button 
-                   onClick={() => setIsMasterEditing(true)} 
-                   className="text-purple-400 hover:text-purple-300 transition-colors bg-purple-900/20 px-2 py-1 rounded text-xs font-bold border border-purple-800"
-                   title="Zarządzaj całym cyklem KvK"
-                 >
+                 <button onClick={() => setIsMasterEditing(true)} className="text-purple-400 hover:text-purple-300 bg-purple-900/20 px-2 py-1 rounded text-xs font-bold border border-purple-800">
                    ⚙️ KvK #{kvkNumber}
                  </button>
                )}
-               <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-white transition-colors" title="Edytuj tylko to">✏️</button>
+               <button onClick={() => setIsEditing(true)} className="text-gray-500 hover:text-white" title="Edytuj">✏️</button>
             </div>
           </div>
           
-          <div className={`text-sm font-mono mb-2 ${isCurrent ? 'text-green-400 font-bold' : 'opacity-80'}`}>
+          <div className={`text-sm font-mono mb-4 ${isCurrent ? 'text-green-400 font-bold' : 'opacity-80'}`}>
             {new Date(event.start_date).toLocaleDateString('pl-PL', {day:'numeric', month:'short'})} — {new Date(event.end_date).toLocaleDateString('pl-PL', {day:'numeric', month:'short'})}
           </div>
           
-          <p className="text-sm opacity-90 mb-4 italic">{event.description}</p>
+          {/* TUTAJ BYŁ OPIS - ZOSTAŁ USUNIĘTY */}
           
           <button onClick={() => setShowReport(!showReport)} className="text-xs font-bold uppercase tracking-wider border border-white/20 px-3 py-1 rounded hover:bg-white/10 transition-colors">
               {showReport ? t('event.hide_report') : `📊 ${t('event.show_report')}`}
@@ -228,7 +219,7 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
                               ))}
                           </tbody>
                       </table>
-                  ) : <p className="text-xs text-gray-500">Brak danych w tym okresie.</p>}
+                  ) : <p className="text-xs text-gray-500">Brak danych.</p>}
               </div>
           )}
         </div>
