@@ -5,7 +5,8 @@ import { supabase } from '@/utils/supabase'
 import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/app/context/LanguageContext'
 
-type Snapshot = { alliance_id: number; total_power: number; recorded_at: string }
+// 👇 TUTAJ BYŁ BRAKUJĄCY 'id'
+type Snapshot = { id: number; alliance_id: number; total_power: number; recorded_at: string }
 type Alliance = { id: number; tag: string; name: string }
 
 export default function EventCard({ event, snapshots, alliances }: { event: any, snapshots: Snapshot[], alliances: Alliance[] }) {
@@ -52,18 +53,33 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
     }
   }
 
-  // --- MATEMATYKA RAPORTU ---
+  // --- ELASTYCZNA MATEMATYKA RAPORTU ---
   const calculateReport = () => {
-    const startWindow = [event.start_date, new Date(new Date(event.start_date).getTime() - 86400000).toISOString().split('T')[0]]
-    const endWindow = [event.end_date, new Date(new Date(event.end_date).getTime() + 86400000).toISOString().split('T')[0]]
     return alliances.map(alliance => {
-      const history = snapshots.filter(s => s.alliance_id === alliance.id)
-      const startSnap = history.find(s => startWindow.includes(s.recorded_at)) || history.find(s => s.recorded_at >= event.start_date)
-      const endSnap = history.find(s => endWindow.includes(s.recorded_at)) || history.find(s => s.recorded_at <= event.end_date)
-      if (!startSnap || !endSnap) return null
+      const history = snapshots
+        .filter(s => s.alliance_id === alliance.id)
+        .sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime())
+
+      if (history.length === 0) return null
+
+      // Start: pierwszy snapshot >= data startu
+      const startSnap = history.find(s => s.recorded_at >= event.start_date)
+
+      // Koniec: ostatni snapshot <= data końca
+      const validEndSnaps = history.filter(s => s.recorded_at <= event.end_date)
+      const endSnap = validEndSnaps[validEndSnaps.length - 1]
+
+      // Walidacja (TERAZ ZADZIAŁA BO MAMY ID W TYPIE)
+      if (!startSnap || !endSnap || startSnap.id === endSnap.id) return null
+      
+      if (startSnap.recorded_at >= endSnap.recorded_at) return null
+
       return { tag: alliance.tag, diff: endSnap.total_power - startSnap.total_power }
-    }).filter(Boolean).sort((a: any, b: any) => b.diff - a.diff)
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => b.diff - a.diff)
   }
+  
   const report = showReport ? calculateReport() : []
 
   // --- UPDATE ---
@@ -93,13 +109,13 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
 
   return (
     <div className="relative pl-8 md:pl-12 group">
-      {/* Kropka na osi (Pulsuje jeśli aktywne) */}
+      {/* Kropka na osi */}
       <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 bg-[#1a1a1a] z-10 
         ${isCurrent ? 'border-green-500 bg-green-500 shadow-[0_0_15px_#22c55e] animate-pulse' : 
           (isEditing || isMasterEditing) ? 'border-yellow-500' : 'border-gray-600'}`} 
       />
 
-      {/* --- TRYB MASTER EDIT (KVK) --- */}
+      {/* --- TRYB MASTER EDIT --- */}
       {isMasterEditing ? (
         <div className="p-5 rounded-lg border-2 border-purple-500 bg-[#222] shadow-[0_0_15px_rgba(168,85,247,0.3)]">
           <h3 className="text-purple-400 font-bold mb-4 uppercase text-sm tracking-wider">
@@ -107,7 +123,7 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
           </h3>
           <div className="space-y-4">
             <div>
-              <label className="text-xs text-gray-500 uppercase font-bold">Przeciwnik (Królestwo)</label>
+              <label className="text-xs text-gray-500 uppercase font-bold">Przeciwnik</label>
               <input placeholder="np. Kingdom #1337" className="w-full bg-[#333] p-2 rounded border border-gray-600 text-white"
                 value={masterData.opponent} onChange={e => setMasterData({...masterData, opponent: e.target.value})} />
             </div>
@@ -196,8 +212,6 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
             {new Date(event.start_date).toLocaleDateString('pl-PL', {day:'numeric', month:'short'})} — {new Date(event.end_date).toLocaleDateString('pl-PL', {day:'numeric', month:'short'})}
           </div>
           
-          {/* TUTAJ BYŁ OPIS - ZOSTAŁ USUNIĘTY */}
-          
           <button onClick={() => setShowReport(!showReport)} className="text-xs font-bold uppercase tracking-wider border border-white/20 px-3 py-1 rounded hover:bg-white/10 transition-colors">
               {showReport ? t('event.hide_report') : `📊 ${t('event.show_report')}`}
           </button>
@@ -219,7 +233,7 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
                               ))}
                           </tbody>
                       </table>
-                  ) : <p className="text-xs text-gray-500">Brak danych.</p>}
+                  ) : <p className="text-xs text-gray-500">Brak danych (wymagane min. 2 wpisy w okresie trwania eventu).</p>}
               </div>
           )}
         </div>
