@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-
-// Upewnij się, że ta ścieżka pasuje do Twojej struktury folderów
-// Jeśli folder context jest w app/context, to ta ścieżka jest OK:
 import { LanguageProvider } from '@/app/context/LanguageContext'
+import { AdminProvider } from '@/app/context/AdminContext' // <--- NOWY IMPORT
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,7 +11,6 @@ export const metadata: Metadata = {
   description: "Centrum dowodzenia",
 };
 
-// 👇 TUTAJ BYŁ BŁĄD. Musi być "export default function"
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -23,7 +20,9 @@ export default function RootLayout({
     <html lang="pl">
       <body className={inter.className}>
         <LanguageProvider>
-          {children}
+          <AdminProvider> {/* <--- DODAJEMY ADMIN PROVIDER */}
+            {children}
+          </AdminProvider>
         </LanguageProvider>
       </body>
     </html>

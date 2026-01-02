@@ -1,6 +1,6 @@
 import { supabase } from '@/utils/supabase'
 import DashboardTable from '@/components/DashboardTable'
-import Header from '@/components/Header' // <--- Import nowego Headera
+import Header from '@/components/Header'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,10 +11,9 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0] p-4 md:p-8 font-sans">
       <div className="max-w-6xl mx-auto">
-        
-        {/* Używamy komponentu Header, który ma w sobie tłumaczenia i przycisk */}
         <Header />
-
+        
+        {/* Usunęliśmy showPrivateData, bo tabela sama to sprawdza */}
         <DashboardTable 
           alliances={alliances || []} 
           snapshots={snapshots || []} 

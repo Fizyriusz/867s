@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/app/context/LanguageContext'
+import { useAdmin } from '@/app/context/AdminContext'
 import { supabase } from '@/utils/supabase'
 
 type Alliance = {
@@ -12,6 +13,7 @@ type Snapshot = {
   alliance_id: number; total_power: number; recorded_at: string
 }
 
+// --- HELPERY FORMATOWANIA ---
 const formatDiff = (val: number) => {
     if (val === 0) return '-'
     const sign = val > 0 ? '+' : ''
@@ -50,34 +52,32 @@ const getStatusColor = (status: string) => {
 
 export default function DashboardTable({ alliances, snapshots }: { alliances: Alliance[], snapshots: Snapshot[] }) {
   const { t } = useLanguage()
+  const { isAdmin } = useAdmin() // Sprawdzamy uprawnienia z Contextu
+  
+  // Lokalny stan sojuszy (dla płynnej edycji bez odświeżania strony)
   const [localAlliances, setLocalAlliances] = useState(alliances)
 
-  // Daty
+  // --- LOGIKA DAT ---
   const availableDates = Array.from(new Set(snapshots.map(s => s.recorded_at)))
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
   
   const [viewDate, setViewDate] = useState(availableDates[0] || new Date().toISOString().split('T')[0])
 
   // --- LOGIKA DROPOUTÓW (Kto wypadł?) ---
-  // 1. Znajdź datę poprzedzającą aktualnie wybraną (Previous Import)
   const currentDateIndex = availableDates.indexOf(viewDate)
-  const prevDate = availableDates[currentDateIndex + 1] // Następna w tablicy to starsza data
+  const prevDate = availableDates[currentDateIndex + 1]
 
-  // 2. Pobierz ID sojuszy z "Dzisiaj" i "Poprzednio"
   const currentSnapshots = snapshots.filter(s => s.recorded_at === viewDate)
   const prevSnapshots = prevDate ? snapshots.filter(s => s.recorded_at === prevDate) : []
 
   const currentAllianceIds = currentSnapshots.map(s => s.alliance_id)
   const prevAllianceIds = prevSnapshots.map(s => s.alliance_id)
 
-  // 3. Oblicz Dropouty (Byli w Prev, nie ma w Current)
   const dropoutIds = prevAllianceIds.filter(id => !currentAllianceIds.includes(id))
-  
-  // Pobierz pełne obiekty sojuszy dla dropoutów
   const dropoutAlliances = alliances.filter(a => dropoutIds.includes(a.id))
 
 
-  // --- HANDLERY ---
+  // --- HANDLERY ZMIAN (STATUS / NOTATKI) ---
   const handleStatusChange = async (id: number, newStatus: string) => {
     setLocalAlliances(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a))
     await supabase.from('alliances').update({ status: newStatus }).eq('id', id)
@@ -128,8 +128,10 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_last')}</th>
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_7d')}</th>
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_30d')}</th>
-                <th className="p-4 text-center">{t('dash.col.status')}</th>
-                <th className="p-4 text-gray-500 w-64">{t('dash.col.notes')}</th>
+                
+                {/* KOLUMNY WIDOCZNE TYLKO DLA ADMINA */}
+                {isAdmin && <th className="p-4 text-center">{t('dash.col.status')}</th>}
+                {isAdmin && <th className="p-4 text-gray-500 w-64">{t('dash.col.notes')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700 text-sm">
@@ -149,7 +151,6 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 const diff30d = entry30d ? currentEntry.total_power - entry30d.total_power : 0
 
                 // CZY JEST NOWY? (Ma wpis dziś, nie miał w poprzednim imporcie)
-                // Warunek: Mamy datę poprzednią ORAZ ten sojusz nie miał wtedy snapshota
                 const isNewEntry = prevDate && !prevAllianceIds.includes(alliance.id)
 
                 return (
@@ -171,35 +172,47 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                     <td className={`p-4 text-right font-mono font-bold ${diff7d > 0 ? 'text-green-400' : diff7d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry7d ? formatDiff(diff7d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     <td className={`p-4 text-right font-mono font-bold ${diff30d > 0 ? 'text-green-400' : diff30d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry30d ? formatDiff(diff30d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     
-                    <td className="p-4 text-center">
-                        <select 
-                            value={alliance.status || 'NEUTRAL'} 
-                            onChange={(e) => handleStatusChange(alliance.id, e.target.value)}
-                            className={`px-2 py-1 rounded text-xs font-bold border appearance-none cursor-pointer focus:outline-none text-center w-full transition-colors ${getStatusColor(alliance.status || 'NEUTRAL')}`}
-                        >
-                            <option value="NEUTRAL" className="bg-[#252525] text-gray-400">—</option>
-                            <option value="TARGET" className="bg-[#252525] text-green-400">TARGET</option>
-                            <option value="SKIP" className="bg-[#252525] text-red-400">SKIP</option>
-                            <option value="ALLY" className="bg-[#252525] text-blue-400">ALLY</option>
-                            <option value="FARM" className="bg-[#252525] text-yellow-400">FARM</option>
-                        </select>
-                    </td>
+                    {/* ZMIANA STATUSU (TYLKO ADMIN) */}
+                    {isAdmin && (
+                        <td className="p-4 text-center">
+                            <select 
+                                value={alliance.status || 'NEUTRAL'} 
+                                onChange={(e) => handleStatusChange(alliance.id, e.target.value)}
+                                className={`px-2 py-1 rounded text-xs font-bold border appearance-none cursor-pointer focus:outline-none text-center w-full transition-colors ${getStatusColor(alliance.status || 'NEUTRAL')}`}
+                            >
+                                <option value="NEUTRAL" className="bg-[#252525] text-gray-400">—</option>
+                                <option value="TARGET" className="bg-[#252525] text-green-400">TARGET</option>
+                                <option value="SKIP" className="bg-[#252525] text-red-400">SKIP</option>
+                                <option value="ALLY" className="bg-[#252525] text-blue-400">ALLY</option>
+                                <option value="FARM" className="bg-[#252525] text-yellow-400">FARM</option>
+                            </select>
+                        </td>
+                    )}
 
-                    <td className="p-4">
-                        <input 
-                            type="text"
-                            defaultValue={alliance.notes || ''}
-                            placeholder="..."
-                            onBlur={(e) => handleNoteSave(alliance.id, e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                            className="bg-transparent border-b border-transparent hover:border-gray-600 focus:border-blue-500 focus:bg-[#222] outline-none w-full text-xs text-gray-400 placeholder-gray-700 transition-all px-1 py-1 rounded"
-                        />
-                    </td>
+                    {/* EDYTOWALNE NOTATKI (TYLKO ADMIN) */}
+                    {isAdmin && (
+                        <td className="p-4">
+                            <input 
+                                type="text"
+                                defaultValue={alliance.notes || ''}
+                                placeholder="..."
+                                onBlur={(e) => handleNoteSave(alliance.id, e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                                className="bg-transparent border-b border-transparent hover:border-gray-600 focus:border-blue-500 focus:bg-[#222] outline-none w-full text-xs text-gray-400 placeholder-gray-700 transition-all px-1 py-1 rounded"
+                            />
+                        </td>
+                    )}
                   </tr>
                 )
               })}
+              
+              {/* EMPTY STATE */}
               {snapshots.filter(s => s.recorded_at === viewDate).length === 0 && (
-                 <tr><td colSpan={8} className="p-8 text-center text-gray-500">{t('dash.no_data')} ({viewDate}).</td></tr>
+                 <tr>
+                    <td colSpan={isAdmin ? 8 : 6} className="p-8 text-center text-gray-500">
+                        {t('dash.no_data')} ({viewDate}).
+                    </td>
+                 </tr>
               )}
             </tbody>
           </table>
@@ -217,7 +230,6 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
               {dropoutAlliances.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {dropoutAlliances.map(alliance => {
-                          // Znajdźmy ostatnią znaną moc (z prevDate)
                           const lastKnownPower = snapshots.find(s => s.alliance_id === alliance.id && s.recorded_at === prevDate)?.total_power || 0
                           
                           return (

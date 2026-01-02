@@ -54,7 +54,7 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
   }
 
   // --- ELASTYCZNA MATEMATYKA RAPORTU ---
-  const calculateReport = () => {
+const calculateReport = () => {
     return alliances.map(alliance => {
       const history = snapshots
         .filter(s => s.alliance_id === alliance.id)
@@ -62,18 +62,16 @@ export default function EventCard({ event, snapshots, alliances }: { event: any,
 
       if (history.length === 0) return null
 
-      // Start: pierwszy snapshot >= data startu
-      const startSnap = history.find(s => s.recorded_at >= event.start_date)
+      // START: Szukamy OSTATNIEGO wpisu PRZED rozpoczęciem eventu
+      const startSnap = [...history].reverse().find(s => s.recorded_at < event.start_date)
 
-      // Koniec: ostatni snapshot <= data końca
+      // KONIEC: Szukamy NAJNOWSZEGO wpisu w trakcie trwania eventu (lub na jego koniec)
       const validEndSnaps = history.filter(s => s.recorded_at <= event.end_date)
       const endSnap = validEndSnaps[validEndSnaps.length - 1]
 
-      // Walidacja (TERAZ ZADZIAŁA BO MAMY ID W TYPIE)
+      // Walidacja: Musimy mieć oba punkty i muszą to być różne wpisy
       if (!startSnap || !endSnap || startSnap.id === endSnap.id) return null
       
-      if (startSnap.recorded_at >= endSnap.recorded_at) return null
-
       return { tag: alliance.tag, diff: endSnap.total_power - startSnap.total_power }
     })
     .filter(Boolean)
