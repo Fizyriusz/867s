@@ -9,6 +9,7 @@ export const translations = {
     "nav.import": "Zarządzanie / Import",
     "server.age": "Dzień Serwera:", // NOWE
     "nav.roadmap": "Rozwój / Zmiany",
+"nav.targets": "Cele",             // <--- NOWY WPIS
 
     // Roadmap Page
     "roadmap.title": "Plan Rozwoju & Historia",
@@ -83,6 +84,7 @@ export const translations = {
     "nav.import": "Manage / Import",
     "server.age": "Server Day:", // NEW
     "nav.roadmap": "Roadmap / Changelog",
+"nav.targets": "Targets",
 
     // Roadmap Page
     "roadmap.title": "Development Roadmap",
