@@ -52,7 +52,7 @@ const getStatusColor = (status: string) => {
 
 export default function DashboardTable({ alliances, snapshots }: { alliances: Alliance[], snapshots: Snapshot[] }) {
   const { t } = useLanguage()
-  const { isAdmin } = useAdmin() // Sprawdzamy uprawnienia z Contextu
+  const { isRecruiterOrHigher } = useAdmin() // Sprawdzamy uprawnienia z Contextu
   
   // Lokalny stan sojuszy (dla płynnej edycji bez odświeżania strony)
   const [localAlliances, setLocalAlliances] = useState(alliances)
@@ -130,8 +130,8 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_30d')}</th>
                 
                 {/* KOLUMNY WIDOCZNE TYLKO DLA ADMINA */}
-                {isAdmin && <th className="p-4 text-center">{t('dash.col.status')}</th>}
-                {isAdmin && <th className="p-4 text-gray-500 w-64">{t('dash.col.notes')}</th>}
+                {isRecruiterOrHigher && <th className="p-4 text-center">{t('dash.col.status')}</th>}
+                {isRecruiterOrHigher && <th className="p-4 text-gray-500 w-64">{t('dash.col.notes')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700 text-sm">
@@ -173,7 +173,7 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                     <td className={`p-4 text-right font-mono font-bold ${diff30d > 0 ? 'text-green-400' : diff30d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry30d ? formatDiff(diff30d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     
                     {/* ZMIANA STATUSU (TYLKO ADMIN) */}
-                    {isAdmin && (
+                    {isRecruiterOrHigher && (
                         <td className="p-4 text-center">
                             <select 
                                 value={alliance.status || 'NEUTRAL'} 
@@ -190,7 +190,7 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                     )}
 
                     {/* EDYTOWALNE NOTATKI (TYLKO ADMIN) */}
-                    {isAdmin && (
+                    {isRecruiterOrHigher && (
                         <td className="p-4">
                             <input 
                                 type="text"
@@ -209,7 +209,7 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
               {/* EMPTY STATE */}
               {snapshots.filter(s => s.recorded_at === viewDate).length === 0 && (
                  <tr>
-                    <td colSpan={isAdmin ? 8 : 6} className="p-8 text-center text-gray-500">
+                    <td colSpan={isRecruiterOrHigher ? 8 : 6} className="p-8 text-center text-gray-500">
                         {t('dash.no_data')} ({viewDate}).
                     </td>
                  </tr>

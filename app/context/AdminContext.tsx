@@ -2,40 +2,56 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
+// Definiujemy możliwe role
+export type UserRole = 'guest' | 'recruiter' | 'admin'
+
 type AdminContextType = {
-  isAdmin: boolean
+  role: UserRole
   login: (password: string) => boolean
   logout: () => void
+  isRecruiterOrHigher: boolean // Helper: czy ma uprawnienia rekrutera lub wyższe
+  isAdmin: boolean // Helper: czy jest adminem
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined)
 
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [role, setRole] = useState<UserRole>('guest')
 
-  // Sprawdzamy przy wejściu, czy użytkownik był już zalogowany (zapisane w przeglądarce)
+  // Sprawdzamy przy wejściu, czy rola była zapisana
   useEffect(() => {
-    const savedAuth = localStorage.getItem('is_admin_867')
-    if (savedAuth === 'true') setIsAdmin(true)
+    const savedRole = localStorage.getItem('app_role') as UserRole
+    if (savedRole && ['guest', 'recruiter', 'admin'].includes(savedRole)) {
+      setRole(savedRole)
+    }
   }, [])
 
   const login = (password: string) => {
-    // --- TUTAJ USTAV HASŁO ---
+    // --- HASŁA ---
     if (password === '867') { 
-      setIsAdmin(true)
-      localStorage.setItem('is_admin_867', 'true')
+      setRole('admin')
+      localStorage.setItem('app_role', 'admin')
+      return true
+    }
+    if (password === 'hunter') { 
+      setRole('recruiter')
+      localStorage.setItem('app_role', 'recruiter')
       return true
     }
     return false
   }
 
   const logout = () => {
-    setIsAdmin(false)
-    localStorage.removeItem('is_admin_867')
+    setRole('guest')
+    localStorage.removeItem('app_role')
   }
 
+  // Helpery dla wygody w kodzie
+  const isAdmin = role === 'admin'
+  const isRecruiterOrHigher = role === 'admin' || role === 'recruiter'
+
   return (
-    <AdminContext.Provider value={{ isAdmin, login, logout }}>
+    <AdminContext.Provider value={{ role, login, logout, isAdmin, isRecruiterOrHigher }}>
       {children}
     </AdminContext.Provider>
   )

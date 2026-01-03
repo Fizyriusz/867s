@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { useLanguage } from '@/app/context/LanguageContext'
-import { useAdmin } from '@/app/context/AdminContext' // <--- IMPORT
+import { useAdmin } from '@/app/context/AdminContext'
 import { usePathname } from 'next/navigation'
 
 export default function Header() {
   const { t, lang, setLang } = useLanguage()
-  const { isAdmin, login, logout } = useAdmin() // <--- UŻYCIE
+  // Pobieramy nowe helpery z Contextu
+  const { role, login, logout, isAdmin, isRecruiterOrHigher } = useAdmin() 
   const pathname = usePathname()
 
   const SERVER_START_DATE = new Date('2025-08-21')
@@ -16,10 +17,10 @@ export default function Header() {
   const serverDay = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
 
   const handleLogin = () => {
-    if (isAdmin) {
-      if(confirm('Wylogować?')) logout()
+    if (isRecruiterOrHigher) {
+      if(confirm(`Jesteś zalogowany jako: ${role.toUpperCase()}. Wylogować?`)) logout()
     } else {
-      const pass = prompt('Podaj hasło administratora:')
+      const pass = prompt('Podaj hasło (Admin lub Rekruter):')
       if (pass) {
         if (!login(pass)) alert('Błędne hasło!')
       }
@@ -39,17 +40,17 @@ export default function Header() {
       </Link>
       
       <div className="flex flex-wrap gap-2 items-center justify-center">
-        {/* Przełącznik Admina (Kłódka) */}
+        {/* Kłódka / Login */}
         <button 
           onClick={handleLogin}
           className={`px-3 py-2 rounded font-mono text-sm border transition-colors mr-2 ${
-            isAdmin 
-            ? 'bg-green-900/30 text-green-400 border-green-800 hover:bg-green-900/50' 
-            : 'bg-red-900/10 text-red-500/50 border-red-900/30 hover:bg-red-900/30'
+            isAdmin ? 'bg-purple-900/30 text-purple-400 border-purple-800' :
+            isRecruiterOrHigher ? 'bg-green-900/30 text-green-400 border-green-800' :
+            'bg-red-900/10 text-red-500/50 border-red-900/30'
           }`}
-          title={isAdmin ? "Jesteś Adminem (Kliknij by wylogować)" : "Zaloguj się"}
+          title={isRecruiterOrHigher ? `Zalogowany: ${role}` : "Zaloguj się"}
         >
-          {isAdmin ? '🔓' : '🔒'}
+          {isAdmin ? '👑' : (isRecruiterOrHigher ? '🏹' : '🔒')}
         </button>
 
         <button 
@@ -77,13 +78,14 @@ export default function Header() {
             </Link>
         )}
 
-        {/* UKRYTE DLA NIE-ADMINA */}
-        {isAdmin && pathname !== '/targets' && (
+        {/* TARGETY: Widoczne dla Admina I Rekrutera */}
+        {isRecruiterOrHigher && pathname !== '/targets' && (
             <Link href="/targets" className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
               <span>🎯</span> {t('nav.targets')}
             </Link>
         )}
 
+        {/* IMPORT: Widoczny TYLKO DLA ADMINA */}
         {isAdmin && pathname !== '/import' && (
             <Link href="/import" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
             <span>📥</span> {t('nav.import')}
