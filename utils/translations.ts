@@ -75,7 +75,17 @@ export const translations = {
     
     "import.delete.title": "Strefa Usuwania",
     "import.delete.label": "Data do usunięcia",
-    "import.delete.btn": "USUŃ DZIEŃ"
+    "import.delete.btn": "USUŃ DZIEŃ",
+
+    "import.tab.alliances": "🏢 Sojusze & Oś Czasu",
+    "import.tab.players": "👤 Gracze (Nowe)",
+
+    "import.players.title": "Import Graczy",
+    "import.players.json_label": "Lista Graczy (JSON)",
+    "import.players.default_tag": "Domyślny Tag Sojuszu (Opcjonalne)",
+    "import.players.btn": "IMPORTUJ GRACZY",
+    "import.players.info": "Wklej JSON z OCR. System rozpozna poziomy (np. Gold 1 -> 31) i formaty mocy (66.9M).",
+
   },
   en: {
     // Header & Server
@@ -151,6 +161,15 @@ export const translations = {
     
     "import.delete.title": "Danger Zone",
     "import.delete.label": "Date to delete",
-    "import.delete.btn": "DELETE DAY"
+    "import.delete.btn": "DELETE DAY",
+
+    "import.tab.alliances": "🏢 Alliances & Timeline",
+    "import.tab.players": "👤 Players (New)",
+
+    "import.players.title": "Player Import",
+    "import.players.json_label": "Player List (JSON)",
+    "import.players.default_tag": "Default Alliance Tag (Optional)",
+    "import.players.btn": "IMPORT PLAYERS",
+    "import.players.info": "Paste JSON from OCR. System handles levels (e.g., Gold 1 -> 31) and power formats (66.9M).",
   }
 }
