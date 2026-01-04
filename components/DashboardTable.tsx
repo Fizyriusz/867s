@@ -52,9 +52,8 @@ const getStatusColor = (status: string) => {
 
 export default function DashboardTable({ alliances, snapshots }: { alliances: Alliance[], snapshots: Snapshot[] }) {
   const { t } = useLanguage()
-  const { isRecruiterOrHigher } = useAdmin() // Sprawdzamy uprawnienia z Contextu
+  const { isRecruiterOrHigher } = useAdmin()
   
-  // Lokalny stan sojuszy (dla płynnej edycji bez odświeżania strony)
   const [localAlliances, setLocalAlliances] = useState(alliances)
 
   // --- LOGIKA DAT ---
@@ -63,21 +62,37 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
   
   const [viewDate, setViewDate] = useState(availableDates[0] || new Date().toISOString().split('T')[0])
 
-  // --- LOGIKA DROPOUTÓW (Kto wypadł?) ---
+  // --- PRZYGOTOWANIE DANYCH (SORTOWANIE I FILTROWANIE) ---
+  // To jest kluczowa zmiana. Tworzymy listę "rankingu" przed wyświetleniem.
+  const rankingList = localAlliances.map(alliance => {
+      const history = snapshots.filter(s => s.alliance_id === alliance.id).sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime())
+      const currentEntry = history.find(s => s.recorded_at === viewDate)
+      
+      return {
+          alliance,
+          history,
+          currentEntry,
+          power: currentEntry ? currentEntry.total_power : -1 // Do sortowania
+      }
+  })
+  .filter(item => item.currentEntry !== undefined) // Usuwamy sojusze bez danych na dziś
+  .sort((a, b) => b.power - a.power) // SORTUJEMY PO MOCY (Malejąco)
+
+
+  // --- LOGIKA DROPOUTÓW ---
   const currentDateIndex = availableDates.indexOf(viewDate)
   const prevDate = availableDates[currentDateIndex + 1]
-
-  const currentSnapshots = snapshots.filter(s => s.recorded_at === viewDate)
   const prevSnapshots = prevDate ? snapshots.filter(s => s.recorded_at === prevDate) : []
-
-  const currentAllianceIds = currentSnapshots.map(s => s.alliance_id)
+  
+  // Lista ID obecnych w dzisiejszym widoku
+  const currentAllianceIds = rankingList.map(item => item.alliance.id)
   const prevAllianceIds = prevSnapshots.map(s => s.alliance_id)
 
   const dropoutIds = prevAllianceIds.filter(id => !currentAllianceIds.includes(id))
   const dropoutAlliances = alliances.filter(a => dropoutIds.includes(a.id))
 
 
-  // --- HANDLERY ZMIAN (STATUS / NOTATKI) ---
+  // --- HANDLERY ---
   const handleStatusChange = async (id: number, newStatus: string) => {
     setLocalAlliances(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a))
     await supabase.from('alliances').update({ status: newStatus }).eq('id', id)
@@ -122,6 +137,9 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
           <table className="w-full text-left border-collapse">
             <thead className="bg-[#303030] text-gray-300 uppercase text-xs tracking-wider">
               <tr>
+                {/* NOWA KOLUMNA: RANKING */}
+                <th className="p-4 w-12 text-center text-gray-500">{t('dash.col.rank')}</th>
+
                 <th className="p-4 w-16 text-center">{t('dash.col.tag')}</th>
                 <th className="p-4">{t('dash.col.name')}</th>
                 <th className="p-4 text-right">{t('dash.col.power')} ({new Date(viewDate).toLocaleDateString('pl-PL')})</th>
@@ -129,37 +147,38 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_7d')}</th>
                 <th className="p-4 text-right text-gray-400">{t('dash.col.diff_30d')}</th>
                 
-                {/* KOLUMNY WIDOCZNE TYLKO DLA ADMINA */}
                 {isRecruiterOrHigher && <th className="p-4 text-center">{t('dash.col.status')}</th>}
                 {isRecruiterOrHigher && <th className="p-4 text-gray-500 w-64">{t('dash.col.notes')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700 text-sm">
-              {localAlliances.map((alliance) => {
-                const history = snapshots.filter(s => s.alliance_id === alliance.id).sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime())
-                const currentEntry = history.find(s => s.recorded_at === viewDate)
+              {rankingList.map((item, index) => {
+                const { alliance, currentEntry, history } = item
+                // currentEntry na pewno istnieje (przefiltrowane wyżej)
                 
-                // Jeśli sojuszu nie ma w tym dniu, w ogóle go nie wyświetlamy w głównej tabeli
-                if (!currentEntry) return null 
-
-                const currentIndex = history.indexOf(currentEntry)
+                const currentIndex = history.indexOf(currentEntry!)
                 const prevEntry = history[currentIndex - 1] 
                 const entry7d = findPastSnapshot(history, viewDate, 7)
                 const entry30d = findPastSnapshot(history, viewDate, 30)
-                const diffPrev = prevEntry ? currentEntry.total_power - prevEntry.total_power : 0
-                const diff7d = entry7d ? currentEntry.total_power - entry7d.total_power : 0
-                const diff30d = entry30d ? currentEntry.total_power - entry30d.total_power : 0
+                const diffPrev = prevEntry ? currentEntry!.total_power - prevEntry.total_power : 0
+                const diff7d = entry7d ? currentEntry!.total_power - entry7d.total_power : 0
+                const diff30d = entry30d ? currentEntry!.total_power - entry30d.total_power : 0
 
-                // CZY JEST NOWY? (Ma wpis dziś, nie miał w poprzednim imporcie)
+                // CZY JEST NOWY?
                 const isNewEntry = prevDate && !prevAllianceIds.includes(alliance.id)
 
                 return (
                   <tr key={alliance.id} className={`transition-colors group ${isNewEntry ? 'bg-blue-900/10 hover:bg-blue-900/20' : 'hover:bg-[#2a2a2a]'}`}>
+                    
+                    {/* KOLUMNA RANKINGU (Index + 1) */}
+                    <td className="p-4 text-center font-mono text-gray-500 font-bold border-r border-gray-800">
+                        {index + 1}
+                    </td>
+
                     <td className="p-4 font-mono text-blue-400 font-bold text-center">{alliance.tag}</td>
                     <td className="p-4 font-medium text-white">
                       <div className="flex items-center gap-2">
                           <Link href={`/alliance/${alliance.id}`} className="hover:text-blue-400 hover:underline">{alliance.name}</Link>
-                          {/* BADGE NOWOŚCI */}
                           {isNewEntry && (
                               <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">
                                   {t('dash.badge.new')}
@@ -167,12 +186,11 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                           )}
                       </div>
                     </td>
-                    <td className="p-4 text-right font-mono text-gray-200 font-bold">{formatPower(currentEntry.total_power)}</td>
+                    <td className="p-4 text-right font-mono text-gray-200 font-bold">{formatPower(currentEntry!.total_power)}</td>
                     <td className={`p-4 text-right font-mono font-bold ${diffPrev > 0 ? 'text-green-400' : diffPrev < 0 ? 'text-red-400' : 'text-gray-600'}`}>{prevEntry ? formatDiff(diffPrev) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     <td className={`p-4 text-right font-mono font-bold ${diff7d > 0 ? 'text-green-400' : diff7d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry7d ? formatDiff(diff7d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     <td className={`p-4 text-right font-mono font-bold ${diff30d > 0 ? 'text-green-400' : diff30d < 0 ? 'text-red-400' : 'text-gray-600'}`}>{entry30d ? formatDiff(diff30d) : <span className="text-gray-700 text-xs">n/a</span>}</td>
                     
-                    {/* ZMIANA STATUSU (TYLKO ADMIN) */}
                     {isRecruiterOrHigher && (
                         <td className="p-4 text-center">
                             <select 
@@ -189,7 +207,6 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                         </td>
                     )}
 
-                    {/* EDYTOWALNE NOTATKI (TYLKO ADMIN) */}
                     {isRecruiterOrHigher && (
                         <td className="p-4">
                             <input 
@@ -206,10 +223,9 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
                 )
               })}
               
-              {/* EMPTY STATE */}
-              {snapshots.filter(s => s.recorded_at === viewDate).length === 0 && (
+              {rankingList.length === 0 && (
                  <tr>
-                    <td colSpan={isRecruiterOrHigher ? 8 : 6} className="p-8 text-center text-gray-500">
+                    <td colSpan={isRecruiterOrHigher ? 9 : 7} className="p-8 text-center text-gray-500">
                         {t('dash.no_data')} ({viewDate}).
                     </td>
                  </tr>
@@ -219,7 +235,7 @@ export default function DashboardTable({ alliances, snapshots }: { alliances: Al
         </div>
       </div>
 
-      {/* --- SEKCJA SPADKÓW (DROPOUTS) --- */}
+      {/* --- SEKCJA SPADKÓW --- */}
       {prevDate && (
           <div className="bg-red-900/10 border border-red-900/30 rounded-xl p-6 mb-10">
               <h3 className="text-red-400 font-bold text-sm uppercase mb-4 flex items-center gap-2">

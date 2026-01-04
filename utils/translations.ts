@@ -22,6 +22,7 @@ export const translations = {
     "roadmap.status.planned": "PLANOWANE",
 
     // Dashboard Tabela
+    "dash.col.rank": "#", // <--- NOWE
     "dash.col.tag": "Tag",
     "dash.col.name": "Nazwa Sojuszu",
     "dash.col.power": "Moc",
@@ -97,6 +98,7 @@ export const translations = {
     "roadmap.status.planned": "PLANNED",
 
     // Dashboard Table
+    "dash.col.rank": "#", // <--- NEW
     "dash.col.tag": "Tag",
     "dash.col.name": "Alliance Name",
     "dash.col.power": "Power",
