@@ -4,19 +4,17 @@ import { useState } from 'react'
 import { supabase } from '@/utils/supabase'
 import Header from '@/components/Header'
 import { useLanguage } from '@/app/context/LanguageContext'
-// 👇 Importujemy nasze nowe parsery
 import { parsePower, parseLevel } from '@/utils/parsers'
 
 export default function ImportPage() {
   const { t } = useLanguage()
 
-  // --- ZAKŁADKI ---
-  const [activeTab, setActiveTab] = useState<'alliances' | 'players'>('alliances')
+  // --- ZAKŁADKI (TERAZ TRZY) ---
+  const [activeTab, setActiveTab] = useState<'alliances' | 'players' | 'events'>('alliances')
 
   // --- STAN: IMPORT SOJUSZY ---
   const [jsonInput, setJsonInput] = useState('')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [deleteDate, setDeleteDate] = useState('')
   
   // --- STAN: GENERATOR EVENTÓW ---
   const [template, setTemplate] = useState('MANUAL')
@@ -26,16 +24,17 @@ export default function ImportPage() {
 
   // --- STAN: IMPORT GRACZY ---
   const [playerJson, setPlayerJson] = useState('')
-  const [defaultTag, setDefaultTag] = useState('') // Opcjonalny tag, jeśli JSON go nie ma
+  const [defaultTag, setDefaultTag] = useState('') 
   
   // --- WSPÓLNE ---
   const [logs, setLogs] = useState<string[]>([])
+  const [deleteDate, setDeleteDate] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
-  const addLog = (msg: string) => setLogs(prev => [msg, ...prev]) // Najnowsze na górze
+  const addLog = (msg: string) => setLogs(prev => [msg, ...prev])
 
 
   // ==========================================
-  // LOGIKA 1: IMPORT SOJUSZY (STARA)
+  // LOGIKA 1: IMPORT SOJUSZY
   // ==========================================
   const handleImportAlliances = async () => {
     setIsProcessing(true); setLogs([]);
@@ -46,29 +45,19 @@ export default function ImportPage() {
       
       for (const item of data) {
         if (!item.tag || !item.power) continue
-        
-        // 1. Znajdź lub stwórz sojusz
         let allianceId = null
         const { data: existing } = await supabase.from('alliances').select('id').eq('tag', item.tag).single()
         
         if (existing) {
             allianceId = existing.id
         } else {
-            const { data: created } = await supabase.from('alliances').insert({ 
-                tag: item.tag, 
-                name: item.name || 'Unknown', 
-                status: 'NEUTRAL' 
-            }).select().single()
+            const { data: created } = await supabase.from('alliances').insert({ tag: item.tag, name: item.name || 'Unknown', status: 'NEUTRAL' }).select().single()
             if (created) allianceId = created.id
         }
 
-        // 2. Dodaj snapshot
         if (allianceId) {
-          // Parsowanie mocy (na wszelki wypadek użyjmy też parsera tutaj, choć stary import działał na liczbach)
           const powerVal = parsePower(item.power)
-
-          const { data: existingSnap } = await supabase.from('alliance_snapshots')
-            .select('id').eq('alliance_id', allianceId).eq('recorded_at', selectedDate).single()
+          const { data: existingSnap } = await supabase.from('alliance_snapshots').select('id').eq('alliance_id', allianceId).eq('recorded_at', selectedDate).single()
           
           if (existingSnap) {
             await supabase.from('alliance_snapshots').update({ total_power: powerVal }).eq('id', existingSnap.id)
@@ -85,7 +74,7 @@ export default function ImportPage() {
 
 
   // ==========================================
-  // LOGIKA 2: IMPORT GRACZY (NOWA)
+  // LOGIKA 2: IMPORT GRACZY
   // ==========================================
   const handleImportPlayers = async () => {
     setIsProcessing(true); setLogs([]);
@@ -95,32 +84,25 @@ export default function ImportPage() {
       addLog(`👤 Import Graczy: ${selectedDate}`)
 
       for (const item of data) {
-        // Wymagamy: name, power. Tag sojuszu bierzemy z JSON albo z pola domyślnego
         const name = item.name || item.Name
         const rawPower = item.power || item.Power
         const rawLevel = item.level || item.Level || item.town_hall_level
+        // Szukamy tagu w JSON, jeśli nie ma -> bierzemy domyślny
         const tag = item.alliance_tag || item.tag || defaultTag
 
-        if (!name || !rawPower) {
-             addLog(`⚠️ Pominięto wpis (brak nazwy lub mocy): ${JSON.stringify(item)}`)
-             continue
-        }
+        if (!name || !rawPower) continue
 
-        // 1. Parsowanie danych (Cleaning)
         const powerVal = parsePower(rawPower)
         const levelVal = parseLevel(rawLevel)
 
-        // 2. Rozwiązanie ID Sojuszu
+        // A. ID Sojuszu
         let allianceId = null
         if (tag) {
             const { data: existingAll } = await supabase.from('alliances').select('id').eq('tag', tag).single()
             if (existingAll) {
                 allianceId = existingAll.id
             } else {
-                // Opcjonalnie: Tworzymy sojusz "w locie", jeśli nie istnieje
-                const { data: newAll } = await supabase.from('alliances').insert({ 
-                    tag: tag, name: 'Unknown (Auto)', status: 'NEUTRAL' 
-                }).select().single()
+                const { data: newAll } = await supabase.from('alliances').insert({ tag: tag, name: 'Unknown (Auto)', status: 'NEUTRAL' }).select().single()
                 if (newAll) {
                     allianceId = newAll.id
                     addLog(`🆕 Utworzono nowy sojusz: [${tag}]`)
@@ -128,71 +110,42 @@ export default function ImportPage() {
             }
         }
 
-        // 3. Obsługa Gracza (Upsert)
-        // Sprawdzamy czy gracz istnieje po nicku
+        // B. Upsert Gracza
         let playerId = null
         const { data: existingPlayer } = await supabase.from('players').select('id, alliance_id').eq('name', name).single()
 
         if (existingPlayer) {
             playerId = existingPlayer.id
-            // Jeśli gracz zmienił sojusz -> aktualizujemy mu rekord w tabeli `players`
             if (allianceId && existingPlayer.alliance_id !== allianceId) {
                 await supabase.from('players').update({ alliance_id: allianceId }).eq('id', playerId)
                 addLog(`🔀 ${name} zmienił sojusz -> [${tag}]`)
             }
         } else {
-            // Tworzymy nowego gracza
-            const { data: newPlayer } = await supabase.from('players').insert({
-                name: name,
-                alliance_id: allianceId,
-                status: 'ACTIVE'
-            }).select().single()
+            const { data: newPlayer } = await supabase.from('players').insert({ name: name, alliance_id: allianceId, status: 'ACTIVE' }).select().single()
             if (newPlayer) {
                 playerId = newPlayer.id
                 addLog(`✨ Nowy gracz: ${name}`)
             }
         }
 
-        // 4. Dodanie Snapshota Historii
+        // C. Snapshot Historii
         if (playerId) {
-            // Sprawdzamy czy już dziś importowaliśmy tego gracza (żeby nie dublować)
-            const { data: existingSnap } = await supabase.from('player_snapshots')
-                .select('id')
-                .eq('player_id', playerId)
-                .eq('recorded_at', selectedDate)
-                .single()
+            const { data: existingSnap } = await supabase.from('player_snapshots').select('id').eq('player_id', playerId).eq('recorded_at', selectedDate).single()
 
             if (existingSnap) {
-                // Update
-                await supabase.from('player_snapshots').update({
-                    power: powerVal,
-                    town_hall_level: levelVal,
-                    alliance_id: allianceId // Zapisujemy gdzie był w TYM MOMENCIE
-                }).eq('id', existingSnap.id)
+                await supabase.from('player_snapshots').update({ power: powerVal, town_hall_level: levelVal, alliance_id: allianceId }).eq('id', existingSnap.id)
             } else {
-                // Insert
-                await supabase.from('player_snapshots').insert({
-                    player_id: playerId,
-                    power: powerVal,
-                    town_hall_level: levelVal,
-                    alliance_id: allianceId,
-                    recorded_at: selectedDate
-                })
+                await supabase.from('player_snapshots').insert({ player_id: playerId, power: powerVal, town_hall_level: levelVal, alliance_id: allianceId, recorded_at: selectedDate })
             }
         }
       }
       addLog('🏁 Zakończono import graczy!')
-
-    } catch (e: any) {
-        addLog(`🔥 BŁĄD KRYTYCZNY: ${e.message}`)
-    } finally {
-        setIsProcessing(false)
-    }
+    } catch (e: any) { addLog(`🔥 BŁĄD: ${e.message}`) } finally { setIsProcessing(false) }
   }
 
 
   // ==========================================
-  // POZOSTAŁE FUNKCJE (GENERATOR / DELETE)
+  // LOGIKA 3: GENERATOR EVENTÓW
   // ==========================================
   const handleGenerateEvents = async () => {
     if (!startDate) { alert('Select start date!'); return }
@@ -226,11 +179,9 @@ export default function ImportPage() {
   const handleGlobalDelete = async () => {
     if (!deleteDate || !confirm(`Delete data for ${deleteDate}?`)) return
     setIsProcessing(true)
-    // UWAGA: Tu można dodać też usuwanie player_snapshots z tego dnia, 
-    // ale na razie zostawmy tylko sojusze, żeby nie usunąć za dużo przypadkiem.
     await supabase.from('alliance_snapshots').delete({ count: 'exact' }).eq('recorded_at', deleteDate)
     setIsProcessing(false)
-    alert('Alliance snapshots deleted.')
+    alert('Deleted.')
   }
 
 
@@ -248,44 +199,107 @@ export default function ImportPage() {
              <a href="/" className="text-blue-400 hover:underline">← {t('import.back')}</a>
         </div>
 
-        {/* --- PRZEŁĄCZNIK ZAKŁADEK --- */}
-        <div className="flex border-b border-gray-700 mb-6">
-            <button 
-                onClick={() => setActiveTab('alliances')}
-                className={`px-6 py-3 font-bold text-sm transition-colors border-b-2 ${
-                    activeTab === 'alliances' 
-                    ? 'border-blue-500 text-blue-400' 
-                    : 'border-transparent text-gray-500 hover:text-gray-300'
-                }`}
-            >
+        {/* --- PRZEŁĄCZNIK ZAKŁADEK (3 OPCJE) --- */}
+        <div className="flex border-b border-gray-700 mb-6 overflow-x-auto">
+            <button onClick={() => setActiveTab('alliances')}
+                className={`px-6 py-3 font-bold text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === 'alliances' ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
                 {t('import.tab.alliances')}
             </button>
-            <button 
-                onClick={() => setActiveTab('players')}
-                className={`px-6 py-3 font-bold text-sm transition-colors border-b-2 ${
-                    activeTab === 'players' 
-                    ? 'border-purple-500 text-purple-400' 
-                    : 'border-transparent text-gray-500 hover:text-gray-300'
-                }`}
-            >
+            <button onClick={() => setActiveTab('players')}
+                className={`px-6 py-3 font-bold text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === 'players' ? 'border-purple-500 text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
                 {t('import.tab.players')}
+            </button>
+            <button onClick={() => setActiveTab('events')}
+                className={`px-6 py-3 font-bold text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === 'events' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
+                📅 EVENTS
             </button>
         </div>
 
 
-        {/* =======================================================
-            ZAKŁADKA 1: SOJUSZE (STARA ZAWARTOŚĆ) 
-           ======================================================= */}
+        {/* =======================
+            ZAKŁADKA 1: SOJUSZE
+           ======================= */}
         {activeTab === 'alliances' && (
             <div className="space-y-12 animate-in fade-in slide-in-from-left-4 duration-300">
-                
-                {/* Generator Eventów */}
-                <section className="bg-purple-900/10 border border-purple-500/30 p-6 rounded-xl">
-                    <h2 className="text-purple-400 font-bold text-xl mb-4">📅 {t('import.gen.title')}</h2>
+                <section>
+                    <h2 className="text-blue-400 font-bold text-xl mb-4">📥 {t('import.json.title')}</h2>
+                    <div className="bg-[#252525] p-6 rounded border border-gray-700 space-y-4">
+                        <div className="flex gap-4 items-center">
+                            <label className="text-sm font-bold text-gray-400">{t('import.json.date')}</label>
+                            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="bg-[#333] text-white p-2 rounded border border-gray-600"/>
+                        </div>
+                        <textarea className="w-full h-32 bg-[#333] border border-gray-600 rounded p-4 font-mono text-sm text-green-400"
+                        value={jsonInput} onChange={e => setJsonInput(e.target.value)} placeholder={t('import.json.placeholder')} />
+                        <button onClick={handleImportAlliances} disabled={isProcessing} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded">
+                        🚀 {t('import.json.btn')}
+                        </button>
+                    </div>
+                </section>
+
+                <section className="bg-red-900/10 border border-red-900/50 p-6 rounded-xl">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-red-500 font-bold">{t('import.delete.title')}</h2>
+                        <div className="flex gap-2">
+                            <input type="date" value={deleteDate} onChange={e => setDeleteDate(e.target.value)} className="bg-[#333] text-white p-1 rounded border border-gray-600 text-sm"/>
+                            <button onClick={handleGlobalDelete} className="bg-red-700 px-4 py-1 rounded text-white text-sm font-bold">{t('import.delete.btn')}</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        )}
+
+
+        {/* =======================
+            ZAKŁADKA 2: GRACZE
+           ======================= */}
+        {activeTab === 'players' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                <section>
+                    <div className="bg-[#252525] p-6 rounded border border-gray-700 space-y-4 shadow-xl">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold block mb-1">{t('import.json.date')}</label>
+                                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} 
+                                    className="w-full bg-[#333] text-white p-2 rounded border border-gray-600"/>
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold block mb-1">{t('import.players.default_tag')}</label>
+                                <input type="text" value={defaultTag} onChange={e => setDefaultTag(e.target.value)} 
+                                    placeholder="np. LMN (jeśli JSON nie ma tagu)"
+                                    className="w-full bg-[#333] text-white p-2 rounded border border-gray-600 font-mono text-purple-400 placeholder-gray-600"/>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold block mb-1">{t('import.players.json_label')}</label>
+                            <textarea className="w-full h-48 bg-[#333] border border-gray-600 rounded p-4 font-mono text-sm text-purple-300"
+                                value={playerJson} onChange={e => setPlayerJson(e.target.value)} 
+                                placeholder='[ { "name": "L E M O N", "power": "66.9M", "level": "Gold 1", "alliance_tag": "ITA" }, ... ]' 
+                            />
+                            <p className="text-xs text-gray-500 mt-1">{t('import.players.info')}</p>
+                        </div>
+
+                        <button onClick={handleImportPlayers} disabled={isProcessing} 
+                            className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded shadow-lg shadow-purple-900/50 transition-all">
+                             {t('import.players.btn')} 🚀
+                        </button>
+                    </div>
+                </section>
+            </div>
+        )}
+
+
+        {/* =======================
+            ZAKŁADKA 3: EVENTY
+           ======================= */}
+        {activeTab === 'events' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                <section className="bg-orange-900/10 border border-orange-500/30 p-6 rounded-xl">
+                    <h2 className="text-orange-400 font-bold text-xl mb-4">📅 {t('import.gen.title')}</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                         <label className="text-xs text-gray-400 uppercase font-bold block mb-2">{t('import.gen.type')}</label>
-                        <select className="w-full bg-[#333] p-3 rounded border border-gray-600 focus:border-purple-500 text-white font-bold"
+                        <select className="w-full bg-[#333] p-3 rounded border border-gray-600 focus:border-orange-500 text-white font-bold"
                             value={template} onChange={e => setTemplate(e.target.value)}>
                             <option value="MANUAL">Manual</option>
                             <option value="KVK">⚔️ KvK</option>
@@ -293,9 +307,9 @@ export default function ImportPage() {
                         </select>
                         {template === 'KVK' && (
                             <div className="mt-2">
-                            <label className="text-xs text-purple-400 uppercase font-bold">{t('import.gen.kvk_num')}</label>
+                            <label className="text-xs text-orange-400 uppercase font-bold">{t('import.gen.kvk_num')}</label>
                             <input type="number" value={kvkNumber} onChange={e => setKvkNumber(e.target.value)}
-                                className="w-20 ml-2 bg-[#222] border border-purple-500 rounded p-1 text-white text-center font-bold" />
+                                className="w-20 ml-2 bg-[#222] border border-orange-500 rounded p-1 text-white text-center font-bold" />
                             </div>
                         )}
                         </div>
@@ -317,98 +331,19 @@ export default function ImportPage() {
                         </div>
                         )}
                         <button onClick={handleGenerateEvents} disabled={isProcessing}
-                        className="col-span-1 md:col-span-2 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded transition-colors shadow-lg shadow-purple-900/50">
+                        className="col-span-1 md:col-span-2 py-3 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded transition-colors shadow-lg shadow-orange-900/50">
                         ⚡ {t('import.gen.btn')}
                         </button>
                     </div>
                 </section>
-
-                {/* Import Sojuszy */}
-                <section>
-                    <h2 className="text-blue-400 font-bold text-xl mb-4">📥 {t('import.json.title')}</h2>
-                    <div className="bg-[#252525] p-6 rounded border border-gray-700 space-y-4">
-                        <div className="flex gap-4 items-center">
-                            <label className="text-sm font-bold text-gray-400">{t('import.json.date')}</label>
-                            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="bg-[#333] text-white p-2 rounded border border-gray-600"/>
-                        </div>
-                        <textarea className="w-full h-32 bg-[#333] border border-gray-600 rounded p-4 font-mono text-sm text-green-400"
-                        value={jsonInput} onChange={e => setJsonInput(e.target.value)} placeholder={t('import.json.placeholder')} />
-                        <button onClick={handleImportAlliances} disabled={isProcessing} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded">
-                        🚀 {t('import.json.btn')}
-                        </button>
-                    </div>
-                </section>
-
-                {/* Usuwanie */}
-                <section className="bg-red-900/10 border border-red-900/50 p-6 rounded-xl">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-red-500 font-bold">{t('import.delete.title')}</h2>
-                        <div className="flex gap-2">
-                            <input type="date" value={deleteDate} onChange={e => setDeleteDate(e.target.value)} className="bg-[#333] text-white p-1 rounded border border-gray-600 text-sm"/>
-                            <button onClick={handleGlobalDelete} className="bg-red-700 px-4 py-1 rounded text-white text-sm font-bold">{t('import.delete.btn')}</button>
-                        </div>
-                    </div>
-                </section>
             </div>
         )}
 
-
-        {/* =======================================================
-            ZAKŁADKA 2: GRACZE (NOWA ZAWARTOŚĆ) 
-           ======================================================= */}
-        {activeTab === 'players' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                
-                <section>
-                    <div className="flex items-center gap-3 mb-4">
-                        <h2 className="text-purple-400 font-bold text-xl">{t('import.players.title')}</h2>
-                        <span className="bg-purple-900/40 text-purple-300 text-xs px-2 py-1 rounded border border-purple-700">Beta</span>
-                    </div>
-
-                    <div className="bg-[#252525] p-6 rounded border border-gray-700 space-y-4 shadow-xl">
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Data */}
-                            <div>
-                                <label className="text-xs text-gray-500 uppercase font-bold block mb-1">{t('import.json.date')}</label>
-                                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} 
-                                    className="w-full bg-[#333] text-white p-2 rounded border border-gray-600"/>
-                            </div>
-                            {/* Opcjonalny Tag */}
-                            <div>
-                                <label className="text-xs text-gray-500 uppercase font-bold block mb-1">{t('import.players.default_tag')}</label>
-                                <input type="text" value={defaultTag} onChange={e => setDefaultTag(e.target.value)} 
-                                    placeholder="np. LMN (jeśli JSON nie ma tagu)"
-                                    className="w-full bg-[#333] text-white p-2 rounded border border-gray-600 font-mono text-purple-400 placeholder-gray-600"/>
-                            </div>
-                        </div>
-
-                        {/* JSON Input */}
-                        <div>
-                            <label className="text-xs text-gray-500 uppercase font-bold block mb-1">{t('import.players.json_label')}</label>
-                            <textarea className="w-full h-48 bg-[#333] border border-gray-600 rounded p-4 font-mono text-sm text-purple-300"
-                                value={playerJson} onChange={e => setPlayerJson(e.target.value)} 
-                                placeholder='[ { "name": "L E M O N", "power": "66.9M", "level": "1" }, ... ]' 
-                            />
-                            <p className="text-xs text-gray-500 mt-1">{t('import.players.info')}</p>
-                        </div>
-
-                        <button onClick={handleImportPlayers} disabled={isProcessing} 
-                            className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded shadow-lg shadow-purple-900/50 transition-all">
-                             {t('import.players.btn')} 🚀
-                        </button>
-
-                    </div>
-                </section>
-
-            </div>
-        )}
-
-        {/* --- KONSOLA LOGÓW (WSPÓLNA) --- */}
+        {/* --- KONSOLA LOGÓW --- */}
         {logs.length > 0 && (
             <div className="bg-black/80 p-4 rounded border-t-4 border-gray-600 max-h-60 overflow-y-auto font-mono text-xs">
                 {logs.map((l,i) => (
-                    <div key={i} className={`mb-1 ${l.includes('BŁĄD') ? 'text-red-400' : l.includes('Nowy') ? 'text-green-400' : 'text-gray-400'}`}>
+                    <div key={i} className={`mb-1 ${l.includes('BŁĄD') ? 'text-red-400' : l.includes('Nowy') || l.includes('Dodano') ? 'text-green-400' : 'text-gray-400'}`}>
                         {l}
                     </div>
                 ))}

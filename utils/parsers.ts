@@ -34,30 +34,47 @@ export const parsePower = (raw: string | number | null | undefined): number => {
  * ...
  * 5 (Gold) -> 35
  */
+// utils/parsers.ts
+
+// ... (funkcja parsePower bez zmian) ...
+
+/**
+ * Zamienia string z levelem na liczbę do sortowania.
+ * Obsługuje: "Lv.30", "Truegold 1", "TG 3", "True Gold 5", "1" (jako TG)
+ * * Logika Truegold (TG):
+ * TG 1 -> 31
+ * TG 5 -> 35
+ */
 export const parseLevel = (raw: string | number | null | undefined): number => {
   if (typeof raw === 'number') return raw
   if (!raw) return 0
 
-  const str = raw.toString().trim()
+  const str = raw.toString().trim().toLowerCase()
 
-  // Przypadek 1: Format "Lv. XX" lub "Lv XX"
-  if (str.toLowerCase().includes('lv')) {
-    // Usuwamy wszystko co nie jest cyfrą
+  // 1. Obsługa Truegold (TG / True Gold / Truegold)
+  // Szukamy fraz: "tg", "true", "gold"
+  if (str.includes('tg') || str.includes('true') || str.includes('gold')) {
+    const num = str.replace(/[^0-9]/g, '') // Wyciągamy samą cyfrę
+    const tgLevel = parseInt(num)
+    if (!isNaN(tgLevel)) {
+      return 30 + tgLevel // Truegold 1 = 31
+    }
+  }
+
+  // 2. Obsługa zwykłego levelu "Lv. XX"
+  if (str.includes('lv')) {
     const num = str.replace(/[^0-9]/g, '')
     return parseInt(num) || 0
   }
 
-  // Przypadek 2: Same cyfry (True Gold lub ktoś wpisał sam numer)
+  // 3. Same cyfry (Fallback)
+  // Jeśli AI zwróci samą cyfrę "1", "3", "5" -> zakładamy że to Truegold (bo nikt z Lv 5 nie jest w topce)
   const num = parseInt(str)
-  
   if (!isNaN(num)) {
-    // Jeśli to mała cyfra (1-5), traktujemy jako True Gold (ponad 30)
-    // UWAGA: Zakładamy, że nikt nie wpisuje ręcznie "1" mając Lv 1 ratusza (to nierealne w topce)
-    if (num >= 1 && num <= 5) {
-      return 30 + num // Gold 1 = 31, Gold 5 = 35
+    if (num >= 1 && num <= 8) { // Zapas do TG 8 (gdyby gra wprowadziła nowe)
+      return 30 + num 
     }
-    // W innym przypadku (np. "29") zwracamy jak jest
-    return num
+    return num // Np. 28, 29, 30
   }
 
   return 0
