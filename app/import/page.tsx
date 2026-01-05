@@ -32,6 +32,9 @@ export default function ImportPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const addLog = (msg: string) => setLogs(prev => [msg, ...prev])
 
+// --- STAN: MERGE TOOL ---
+  const [mergeOldId, setMergeOldId] = useState('')
+  const [mergeNewId, setMergeNewId] = useState('')
 
   // ==========================================
   // LOGIKA 1: IMPORT SOJUSZY
@@ -186,7 +189,43 @@ export default function ImportPage() {
     alert('Deleted.')
   }
 
+// ==========================================
+  // LOGIKA 4: MERGE TOOL (FUZJA SOJUSZY)
+  // ==========================================
+  const handleMergeAlliances = async () => {
+    if (!mergeOldId || !mergeNewId) {
+        alert('Podaj oba ID sojuszy!')
+        return
+    }
+    if (mergeOldId === mergeNewId) {
+        alert('ID muszą być różne!')
+        return
+    }
 
+    if (!confirm(`⚠️ UWAGA! \nCzy na pewno chcesz scalić sojusz ID #${mergeNewId} (Nowy) do sojuszu ID #${mergeOldId} (Stary)?\n\nTo usunie sojusz #${mergeNewId} i przeniesie jego historię do #${mergeOldId}. Tej operacji nie da się cofnąć.`)) {
+        return
+    }
+
+    setIsProcessing(true)
+    try {
+        const { error } = await supabase.rpc('merge_alliances', {
+            old_id: parseInt(mergeOldId),
+            new_id: parseInt(mergeNewId)
+        })
+
+        if (error) throw error
+
+        addLog(`✅ Sukces! Sojusz #${mergeNewId} został wchłonięty przez #${mergeOldId}.`)
+        setMergeOldId('')
+        setMergeNewId('')
+        alert('Fuzja zakończona sukcesem! Stary sojusz ma teraz nową nazwę i historię obu.')
+    } catch (e: any) {
+        addLog(`🔥 Błąd Fuzji: ${e.message}`)
+        alert(`Błąd: ${e.message}`)
+    } finally {
+        setIsProcessing(false)
+    }
+  }
   // ==========================================
   // RENDER (UI)
   // ==========================================
@@ -234,6 +273,44 @@ export default function ImportPage() {
                         value={jsonInput} onChange={e => setJsonInput(e.target.value)} placeholder={t('import.json.placeholder')} />
                         <button onClick={handleImportAlliances} disabled={isProcessing} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded">
                         🚀 {t('import.json.btn')}
+                        </button>
+                    </div>
+                </section>
+{/* Narzędzie Fuzji (Rebrand Fixer) */}
+                <section className="bg-yellow-900/10 border border-yellow-600/30 p-6 rounded-xl">
+                    <h2 className="text-yellow-500 font-bold text-xl mb-4">🧬 Narzędzie Fuzji / Rebrandingu</h2>
+                    <p className="text-xs text-gray-400 mb-4">
+                        Użyj tego, gdy sojusz zmienił nazwę i system stworzył nowy zamiast zaktualizować stary. 
+                        Wszystkie dane z <strong>Nowego ID</strong> zostaną przeniesione do <strong>Starego ID</strong>.
+                    </p>
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold block mb-1">Stary ID (Ten z historią)</label>
+                            <input 
+                                type="number" 
+                                placeholder="np. 15"
+                                value={mergeOldId} 
+                                onChange={e => setMergeOldId(e.target.value)} 
+                                className="bg-[#333] text-white p-2 rounded border border-gray-600 w-full font-mono text-green-400 font-bold"
+                            />
+                        </div>
+                        <div className="text-2xl text-gray-600 mb-1">←</div>
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold block mb-1">Nowy ID (Ten zły/nowy)</label>
+                            <input 
+                                type="number" 
+                                placeholder="np. 28"
+                                value={mergeNewId} 
+                                onChange={e => setMergeNewId(e.target.value)} 
+                                className="bg-[#333] text-white p-2 rounded border border-gray-600 w-full font-mono text-red-400 font-bold"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleMergeAlliances} 
+                            disabled={isProcessing}
+                            className="py-2 px-6 bg-yellow-700 hover:bg-yellow-600 text-white font-bold rounded shadow-lg transition-colors"
+                        >
+                            🔗 SCAL SOJUSZE
                         </button>
                     </div>
                 </section>
