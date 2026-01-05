@@ -21,12 +21,34 @@ export const ROADMAP_DATA: RoadmapItem[] = [
   {
     status: 'planned',
     title: {
-      pl: "Moduł Graczy (Player Tracker)",
-      en: "Player Tracker Module"
+      pl: "Wyszukiwarka Globalna",
+      en: "Global Search"
     },
     description: {
-      pl: "Śledzenie mocy konkretnych graczy. Wykrywanie 'wielorybów' i topowych graczy.",
-      en: "Tracking power of specific players. Detecting 'whales' and top tier players."
+      pl: "Pasek wyszukiwania pozwalający znaleźć gracza po nicku niezależnie od sojuszu.",
+      en: "Search bar to find a player by nickname regardless of alliance."
+    }
+  },
+  {
+    status: 'planned',
+    title: {
+      pl: "Profil Gracza (Wykresy)",
+      en: "Player Profile (Charts)"
+    },
+    description: {
+      pl: "Indywidualna strona gracza z wykresem historii jego mocy.",
+      en: "Individual player page with power history chart."
+    }
+  },
+  {
+    status: 'planned',
+    title: {
+      pl: "Audyt Tłumaczeń",
+      en: "Translation Audit"
+    },
+    description: {
+      pl: "Poprawki językowe na wszystkich podstronach (pełne PL/EN).",
+      en: "Language fixes on all subpages (full PL/EN support)."
     }
   },
   {
@@ -56,28 +78,46 @@ export const ROADMAP_DATA: RoadmapItem[] = [
 // --- DANE: CHANGELOG (HISTORIA) ---
 export const CHANGELOG_DATA: ChangelogItem[] = [
   {
+    version: "v1.1 - Player & Roles",
+    date: "2026-01-05",
+    changes: {
+      pl: [
+        "Moduł Graczy: Baza danych, parsowanie 'Truegold' (TG 1-5) i import JSON.",
+        "Profil Sojuszu: Lista graczy z podglądem poziomu i przyrostem mocy.",
+        "System Uprawnień (RBAC): Podział na Gościa, Rekrutera (hasło) i Admina (hasło).",
+        "Strona Celów (/targets): Lista targetów rekrutacyjnych posortowana według siły.",
+        "Import 2.0: Nowy interfejs z zakładkami (Sojusze / Gracze / Eventy).",
+        "UX: Automatyczne czyszczenie tagów sojuszu (usuwanie nawiasów [ABC])."
+      ],
+      en: [
+        "Player Module: Database, 'Truegold' parsing (TG 1-5), and JSON import.",
+        "Alliance Profile: Player list with level badges and power growth.",
+        "Permission System (RBAC): Roles for Guest, Recruiter (password), and Admin (password).",
+        "Targets Page (/targets): Recruitment targets list sorted by power.",
+        "Import 2.0: New interface with tabs (Alliances / Players / Events).",
+        "UX: Automatic alliance tag cleaning (removing brackets [ABC])."
+      ]
+    }
+  },
+  {
     version: "v1.0 - The Hunter Update",
     date: "2026-01-02",
     changes: {
       pl: [
-        "Centrum KvK: Oś czasu wydarzeń, zarządzanie wojną (wyniki Prep/War) i oznaczanie aktywnego eventu.",
-        "Raporty Boostu: Automatyczne wyliczanie przyrostu mocy sojuszy w trakcie trwania eventów.",
-        "System Statusów 2.0: Kolorowe flagi (Target, Skip, Ally, Farm) + domyślny status 'Neutral' (szary).",
-        "Wykrywanie Ruchu: Badge 'NEW' dla nowych sojuszy i sekcja 'Spadli z rankingu' dla tych, co wypadli z Top 100.",
-        "Analityka Dashboardu: Kolumny zmian (Ostatnia, 7 dni, 30 dni) + edytowalne notatki w tabeli.",
-        "Wiek Serwera: Automatyczny licznik dni w nagłówku (start od 21.08.2025).",
-        "Wielojęzyczność (i18n): Pełne tłumaczenie interfejsu (PL/EN) przełączane w czasie rzeczywistym.",
-        "Strona Roadmapy: Dziennik zmian i plany rozwoju (to co właśnie czytasz)."
+        "Centrum KvK: Oś czasu wydarzeń, zarządzanie wojną (wyniki Prep/War).",
+        "Raporty Boostu: Wyliczanie przyrostu mocy sojuszy w trakcie eventów.",
+        "System Statusów: Flagi (Target, Skip, Ally, Farm) + notatki.",
+        "Wykrywanie Ruchu: Badge 'NEW' i sekcja 'Spadli z rankingu'.",
+        "Wiek Serwera: Licznik dni w nagłówku.",
+        "Wielojęzyczność (i18n): Przełącznik PL/EN."
       ],
       en: [
-        "KvK Hub: Event timeline, war management (Prep/War results), and active event tracking.",
-        "Boost Reports: Auto-calculation of alliance power growth during events.",
-        "Status System 2.0: Colored flags (Target, Skip, Ally, Farm) + default 'Neutral' status (gray).",
-        "Movement Detection: 'NEW' badges for entries and 'Dropouts' section for alliances leaving Top 100.",
-        "Dashboard Analytics: Change columns (Last, 7d, 30d) + inline editable notes.",
-        "Server Age: Automatic day counter in header (start date 21.08.2025).",
-        "i18n Support: Full interface translation (PL/EN) with real-time switching.",
-        "Roadmap Page: Changelog and development plans (what you are reading now)."
+        "KvK Hub: Event timeline, war management (Prep/War results).",
+        "Boost Reports: Power growth calculation during events.",
+        "Status System: Flags (Target, Skip, Ally, Farm) + notes.",
+        "Movement Detection: 'NEW' badges and 'Dropouts' section.",
+        "Server Age: Day counter in header.",
+        "i18n Support: PL/EN switcher."
       ]
     }
   },
@@ -86,18 +126,16 @@ export const CHANGELOG_DATA: ChangelogItem[] = [
     date: "2025-12-29",
     changes: {
       pl: [
-        "Start Projektu: Konfiguracja Next.js, Supabase i TailwindCSS.",
-        "Baza Danych: Struktura tabel dla Sojuszy i Snapshotów historii.",
-        "Import Danych: Parser JSON (z OCR) do masowego wgrywania mocy sojuszy.",
-        "Wykresy: Wizualizacja historii mocy dla pojedynczego sojuszu.",
-        "Wehikuł Czasu: Możliwość przeglądania stanu rankingu z dowolnego dnia w przeszłości."
+        "Start Projektu: Next.js + Supabase.",
+        "Baza Danych: Struktura tabel Sojuszy.",
+        "Import: Parser JSON z OCR.",
+        "Wykresy: Historia mocy sojuszu."
       ],
       en: [
-        "Project Launch: Next.js, Supabase, and TailwindCSS setup.",
-        "Database: Schema for Alliances and History Snapshots.",
-        "Data Import: JSON parser (from OCR) for bulk alliance power upload.",
-        "Charts: Power history visualization for individual alliances.",
-        "Time Machine: Ability to view ranking state from any past date."
+        "Project Launch: Next.js + Supabase.",
+        "Database: Alliances table structure.",
+        "Import: JSON parser with OCR.",
+        "Charts: Alliance power history."
       ]
     }
   }
