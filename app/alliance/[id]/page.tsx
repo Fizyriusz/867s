@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/utils/supabase'
 import Header from '@/components/Header'
-import PowerChart from '@/components/PowerChart' // Wykorzystujemy Twój komponent wykresu!
+import PowerChart from '@/components/PowerChart'
 import Link from 'next/link'
 
 // --- TYPY DANYCH ---
@@ -30,9 +30,15 @@ type ChartDataPoint = {
   power: number
 }
 
+type HistoryEntry = {
+    id: number
+    total_power: number
+    recorded_at: string
+}
+
 // --- HELPERY FORMATOWANIA ---
 const formatLevel = (lvl: number) => {
-  if (lvl > 30) return `⭐️ TG ${lvl - 30}` // Truegold
+  if (lvl > 30) return `⭐️ TG ${lvl - 30}`
   if (lvl === 30) return `🔥 Lv 30`
   if (lvl === 0) return `?`
   return `Lv ${lvl}`
@@ -61,72 +67,91 @@ export default function AlliancePage() {
   const params = useParams()
   const allianceId = params.id
   
-  // Stan Aplikacji
+  // --- STAN APLIKACJI ---
   const [alliance, setAlliance] = useState<AllianceDetails | null>(null)
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]) // Dane do wykresu
   
+  // Historia Sojuszu (Wykres + Lista do usuwania)
+  const [historyList, setHistoryList] = useState<HistoryEntry[]>([])
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]) 
+  
+  // Gracze
   const [players, setPlayers] = useState<Player[]>([])
-  const [dates, setDates] = useState<string[]>([])
-  const [viewDate, setViewDate] = useState<string>('')
+  const [dates, setDates] = useState<string[]>([]) // Dostępne daty snapshotów graczy
+  const [viewDate, setViewDate] = useState<string>('') // Wybrana data dla tabeli graczy
   const [loading, setLoading] = useState(true)
 
-  // 1. Pobieranie podstawowych danych (Info + Wykres Historii Sojuszu)
+  // 1. Inicjalizacja: Pobierz dane sojuszu i historię
   useEffect(() => {
-    const fetchBaseData = async () => {
-        if (!allianceId) return
-
-        // A. Info o sojuszu
-        const { data: allData } = await supabase.from('alliances').select('*').eq('id', allianceId).single()
-        setAlliance(allData)
-
-        // B. Historia CAŁEGO sojuszu (do Twojego wykresu)
-        const { data: history } = await supabase
-            .from('alliance_snapshots')
-            .select('total_power, recorded_at')
-            .eq('alliance_id', allianceId)
-            .order('recorded_at', { ascending: true })
-        
-        if (history) {
-            const formattedChart = history.map(entry => ({
-                date: new Date(entry.recorded_at).toLocaleDateString('pl-PL', { month: 'short', day: 'numeric' }),
-                power: entry.total_power
-            }))
-            setChartData(formattedChart)
-        }
-
-        // C. Daty dostępne dla GRACZY (mogą być inne niż dla sojuszu)
-        const { data: playerSnaps } = await supabase
-            .from('player_snapshots')
-            .select('recorded_at')
-            .eq('alliance_id', allianceId)
-            .order('recorded_at', { ascending: false })
-        
-        const uniqueDates = Array.from(new Set(playerSnaps?.map(s => s.recorded_at) || [])) as string[]
-        setDates(uniqueDates)
-        if (uniqueDates.length > 0) setViewDate(uniqueDates[0])
-        else setLoading(false)
-    }
-
     fetchBaseData()
   }, [allianceId])
 
-  // 2. Pobieranie listy graczy przy zmianie daty
+  const fetchBaseData = async () => {
+    if (!allianceId) return
+
+    // A. Info o sojuszu
+    const { data: allData } = await supabase.from('alliances').select('*').eq('id', allianceId).single()
+    setAlliance(allData)
+
+    // B. Historia CAŁEGO sojuszu (do Wykresu i Listy Usuwania)
+    const { data: hist } = await supabase
+        .from('alliance_snapshots')
+        .select('id, total_power, recorded_at')
+        .eq('alliance_id', allianceId)
+        .order('recorded_at', { ascending: true })
+    
+    if (hist) {
+        setHistoryList(hist)
+        setChartData(hist.map(entry => ({
+            date: new Date(entry.recorded_at).toLocaleDateString('pl-PL', { month: 'short', day: 'numeric' }),
+            power: entry.total_power
+        })))
+    }
+
+    // C. Daty dostępne dla GRACZY
+    const { data: playerSnaps } = await supabase
+        .from('player_snapshots')
+        .select('recorded_at')
+        .eq('alliance_id', allianceId)
+        .order('recorded_at', { ascending: false }) // Najnowsze pierwsze
+    
+    // Wyciągamy unikalne daty
+    const uniqueDates = Array.from(new Set(playerSnaps?.map(s => s.recorded_at) || [])) as string[]
+    setDates(uniqueDates)
+    
+    // Automatycznie ustaw najnowszą datę, jeśli nie jest ustawiona
+    if (uniqueDates.length > 0) {
+        setViewDate(uniqueDates[0])
+    } else {
+        setLoading(false)
+    }
+  }
+
+  // 2. Pobieranie listy graczy (Reaguje na zmianę viewDate)
   useEffect(() => {
     if (!viewDate || !allianceId) return
 
     const fetchPlayers = async () => {
         setLoading(true)
+        console.log(`📡 Pobieram graczy dla sojuszu ${allianceId} z dnia ${viewDate}...`)
+
         const dateIndex = dates.indexOf(viewDate)
-        const prevDate = dates[dateIndex + 1]
+        const prevDate = dates[dateIndex + 1] // Data starsza o 1 pozycję w liście
 
         // Pobierz dzisiejszych
-        const { data: current } = await supabase
+        // WAŻNE: 'players(name)' to join. Upewnij się, że relacja w bazie jest OK.
+        const { data: current, error } = await supabase
             .from('player_snapshots')
-            .select('*, players(name)')
+            .select('*, players(name)') 
             .eq('alliance_id', allianceId)
             .eq('recorded_at', viewDate)
 
-        // Pobierz wczorajszych (jeśli są)
+        if (error) {
+            console.error("❌ Błąd pobierania graczy:", error)
+        } else {
+            console.log(`✅ Pobrano ${current?.length} graczy.`)
+        }
+
+        // Pobierz wczorajszych (dla porównania)
         let prevMap: Record<number, number> = {}
         if (prevDate) {
             const { data: p } = await supabase
@@ -141,12 +166,13 @@ export default function AlliancePage() {
         if (current) {
             const formatted = current.map(snap => ({
                 id: snap.player_id,
-                name: snap.players.name,
+                name: snap.players?.name || 'Unknown', // Zabezpieczenie jakby join nie zadziałał
                 power: snap.power,
                 town_hall_level: snap.town_hall_level,
                 prevPower: prevMap[snap.player_id] || 0,
                 diff: prevMap[snap.player_id] ? snap.power - prevMap[snap.player_id] : 0
             }))
+            
             // Sortowanie po mocy
             formatted.sort((a, b) => b.power - a.power)
             setPlayers(formatted)
@@ -155,7 +181,22 @@ export default function AlliancePage() {
     }
 
     fetchPlayers()
-  }, [viewDate, allianceId, dates])
+  }, [viewDate, allianceId, dates]) // Zależy od daty
+
+
+  // --- FUNKCJA USUWANIA DNIA ---
+  const handleDeleteSnapshot = async (snapId: number, dateStr: string) => {
+    if(!confirm(`Czy na pewno usunąć zapis historii sojuszu z dnia ${dateStr}?`)) return
+    
+    const { error } = await supabase.from('alliance_snapshots').delete().eq('id', snapId)
+    
+    if (error) {
+        alert('Błąd usuwania!')
+    } else {
+        // Odśwież dane lokalnie
+        fetchBaseData()
+    }
+  }
 
 
   if (!alliance) return <div className="p-10 text-white font-mono">Ładowanie danych sojuszu...</div>
@@ -166,7 +207,6 @@ export default function AlliancePage() {
     <main className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0] p-4 md:p-8 font-sans">
       <div className="max-w-6xl mx-auto">
         
-        {/* NAGŁÓWEK GŁÓWNY */}
         <Header />
 
         <Link href="/" className="text-gray-500 hover:text-white mb-6 inline-block transition-colors text-sm">
@@ -198,14 +238,35 @@ export default function AlliancePage() {
           </div>
         </div>
 
-        {/* WYKRES HISTORII (Ten co miałeś wcześniej) */}
+        {/* WYKRES HISTORII */}
         {chartData.length > 1 && (
             <div className="mb-10">
                 <PowerChart data={chartData} />
             </div>
         )}
 
-        {/* SEKCJON GRACZY */}
+        {/* PRZYWRÓCONA SEKCJA: HISTORIA I USUWANIE */}
+        <div className="mb-12 bg-[#252525] rounded-xl border border-gray-800 p-6">
+            <h3 className="text-gray-400 font-bold text-sm uppercase mb-4">📜 Historia Mocy Sojuszu (Zarządzanie)</h3>
+            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                {historyList.map(item => (
+                    <div key={item.id} className="flex items-center gap-2 bg-[#333] px-3 py-1 rounded border border-gray-700">
+                        <span className="text-xs text-gray-400 font-mono">{item.recorded_at}</span>
+                        <span className="text-sm font-bold text-white">{formatPower(item.total_power)}</span>
+                        <button 
+                            onClick={() => handleDeleteSnapshot(item.id, item.recorded_at)}
+                            className="ml-2 text-red-500 hover:text-red-300 transition-colors"
+                            title="Usuń ten wpis"
+                        >
+                            🗑️
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+
+
+        {/* SEKCJA GRACZY */}
         <div className="mt-12">
             <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
                 👤 Lista Graczy 
@@ -237,7 +298,10 @@ export default function AlliancePage() {
                 {loading ? (
                     <div className="p-10 text-center text-gray-500 animate-pulse font-mono">Pobieranie danych operacyjnych...</div>
                 ) : players.length === 0 ? (
-                    <div className="p-10 text-center text-gray-500 italic">Brak danych graczy dla tego dnia. Wgraj JSON w zakładce Import.</div>
+                    <div className="p-10 text-center text-gray-500 italic">
+                        Brak danych graczy. <br/>
+                        <span className="text-xs">Upewnij się, że w zakładce Import wgrałeś plik JSON z graczami dla tego sojuszu.</span>
+                    </div>
                 ) : (
                     <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">

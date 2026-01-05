@@ -87,8 +87,10 @@ export default function ImportPage() {
         const name = item.name || item.Name
         const rawPower = item.power || item.Power
         const rawLevel = item.level || item.Level || item.town_hall_level
-        // Szukamy tagu w JSON, jeśli nie ma -> bierzemy domyślny
-        const tag = item.alliance_tag || item.tag || defaultTag
+        // --- POPRAWKA: CZYSZCZENIE TAGU ---
+        // Pobieramy tag, usuwamy spacje I NAWIASY [], żeby zawsze szukał czystego "ITA"
+        let rawTag = item.alliance_tag || item.tag || defaultTag || ''
+        const tag = rawTag.replace(/[\[\]]/g, '').trim().toUpperCase() // np. "[ITA]" -> "ITA"
 
         if (!name || !rawPower) continue
 
