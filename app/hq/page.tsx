@@ -1,8 +1,12 @@
 'use client'
 
 import Header from '@/components/Header'
+import MembersTab from './components/MembersTab'
+import { useState } from 'react'
 
 export default function HqPage() {
+    const [activeTab, setActiveTab] = useState<'members' | 'events' | 'snapshots'>('members')
+
     return (
         <main className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0] p-4 md:p-8 font-sans">
             <div className="max-w-6xl mx-auto">
@@ -10,24 +14,24 @@ export default function HqPage() {
 
                 <h1 className="text-3xl font-bold text-orange-400 mb-6">🛡️ HQ - Centrum Dowodzenia Sojuszu</h1>
 
-                <div className="bg-[#252525] p-8 rounded border border-gray-700">
-                    <p>Witaj w panelu zarządzania.</p>
-                    <p className="text-sm text-gray-500 mt-2">To miejsce zastąpi funkcje z starego kingshot-hq.</p>
+                {/* TABS */}
+                <div className="flex border-b border-gray-700 mb-6 space-x-6">
+                    <button onClick={() => setActiveTab('members')} className={`pb-3 border-b-2 font-bold transition-colors ${activeTab === 'members' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
+                        Członkowie
+                    </button>
+                    <button onClick={() => setActiveTab('events')} className={`pb-3 border-b-2 font-bold transition-colors ${activeTab === 'events' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
+                        Eventy (Wkrótce)
+                    </button>
+                    <button onClick={() => setActiveTab('snapshots')} className={`pb-3 border-b-2 font-bold transition-colors ${activeTab === 'snapshots' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'}`}>
+                        Snapshoty (Wkrótce)
+                    </button>
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-                        <div className="bg-[#333] p-4 rounded border border-gray-600">
-                            <h3 className="font-bold text-xl mb-2">Członkowie</h3>
-                            <p className="text-gray-400 text-sm">Tu będzie lista z TH, Power i Marszami.</p>
-                        </div>
-                        <div className="bg-[#333] p-4 rounded border border-gray-600">
-                            <h3 className="font-bold text-xl mb-2">Eventy</h3>
-                            <p className="text-gray-400 text-sm">Tworzenie i podgląd eventów.</p>
-                        </div>
-                        <div className="bg-[#333] p-4 rounded border border-gray-600">
-                            <h3 className="font-bold text-xl mb-2">Snapshoty</h3>
-                            <p className="text-gray-400 text-sm">Historia rozwoju graczy.</p>
-                        </div>
-                    </div>
+                {/* CONTENT */}
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {activeTab === 'members' && <MembersTab />}
+                    {activeTab === 'events' && <div className="text-gray-500 text-center py-10">Moduł Eventów w trakcie przenoszenia...</div>}
+                    {activeTab === 'snapshots' && <div className="text-gray-500 text-center py-10">Moduł Snapshotów w trakcie przenoszenia...</div>}
                 </div>
             </div>
         </main>
