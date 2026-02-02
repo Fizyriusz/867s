@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from '@/app/context/LanguageContext'
-import { AdminProvider } from '@/app/context/AdminContext' // <--- NOWY IMPORT
+import { AuthProvider } from '@/app/context/AuthContext'
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,9 +20,9 @@ export default function RootLayout({
     <html lang="pl">
       <body className={inter.className}>
         <LanguageProvider>
-          <AdminProvider> {/* <--- DODAJEMY ADMIN PROVIDER */}
+          <AuthProvider>
             {children}
-          </AdminProvider>
+          </AuthProvider>
         </LanguageProvider>
       </body>
     </html>
