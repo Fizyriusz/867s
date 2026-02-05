@@ -2,6 +2,8 @@
 
 import Header from '@/components/Header'
 import MembersTab from './components/MembersTab'
+import EventsTab from './components/EventsTab'
+import SnapshotsTab from './components/SnapshotsTab'
 import { useState } from 'react'
 
 export default function HqPage() {
@@ -30,8 +32,8 @@ export default function HqPage() {
                 {/* CONTENT */}
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     {activeTab === 'members' && <MembersTab />}
-                    {activeTab === 'events' && <div className="text-gray-500 text-center py-10">Moduł Eventów w trakcie przenoszenia...</div>}
-                    {activeTab === 'snapshots' && <div className="text-gray-500 text-center py-10">Moduł Snapshotów w trakcie przenoszenia...</div>}
+                    {activeTab === 'events' && <EventsTab />}
+                    {activeTab === 'snapshots' && <SnapshotsTab />}
                 </div>
             </div>
         </main>

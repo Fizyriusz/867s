@@ -12,11 +12,15 @@ type Player = {
     marches: number | null
     notes: string | null
     is_active: boolean
+    alliance_id: number | null
 }
+
+const TARGET_ALLIANCE_TAG = 'VIP' // Hardcoded for now as requested
 
 export default function MembersTab() {
     const [players, setPlayers] = useState<Player[]>([])
     const [loading, setLoading] = useState(true)
+    const [targetAllianceId, setTargetAllianceId] = useState<number | null>(null)
     const [filterName, setFilterName] = useState('')
     const [showInactive, setShowInactive] = useState(false)
     const [newPlayer, setNewPlayer] = useState({ name: '', th: '', power: '', marches: '' })
@@ -24,14 +28,33 @@ export default function MembersTab() {
     const supabase = createClient()
 
     useEffect(() => {
-        fetchPlayers()
+        fetchAllianceAndPlayers()
     }, [])
 
-    const fetchPlayers = async () => {
+    const fetchAllianceAndPlayers = async () => {
         setLoading(true)
+
+        // 1. Get Target Alliance ID
+        const { data: allianceData } = await supabase
+            .from('alliances')
+            .select('id')
+            .ilike('tag', TARGET_ALLIANCE_TAG) // Case insensitive
+            .single()
+
+        if (!allianceData) {
+            alert(`Nie znaleziono sojuszu o tagu: ${TARGET_ALLIANCE_TAG}`)
+            setLoading(false)
+            return
+        }
+
+        const allianceId = allianceData.id
+        setTargetAllianceId(allianceId)
+
+        // 2. Fetch Players for this Alliance
         const { data, error } = await supabase
             .from('players')
             .select('*')
+            .eq('alliance_id', allianceId)
             .order('name', { ascending: true })
 
         if (error) {
@@ -45,10 +68,11 @@ export default function MembersTab() {
 
     const handleAddPlayer = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!newPlayer.name) return
+        if (!newPlayer.name || !targetAllianceId) return
 
         const payload = {
             name: newPlayer.name,
+            alliance_id: targetAllianceId, // Auto-assign to VIP
             town_hall_level: newPlayer.th ? parseInt(newPlayer.th) : null,
             power: newPlayer.power ? parsePower(newPlayer.power) : null,
             marches: newPlayer.marches ? parseInt(newPlayer.marches) : null,
@@ -61,7 +85,7 @@ export default function MembersTab() {
             alert('Błąd dodawania: ' + error.message)
         } else {
             setNewPlayer({ name: '', th: '', power: '', marches: '' })
-            fetchPlayers()
+            fetchAllianceAndPlayers()
         }
     }
 
@@ -72,7 +96,7 @@ export default function MembersTab() {
         const { error } = await supabase.from('players').update({ [field]: value }).eq('id', id)
         if (error) {
             console.error('Update failed:', error)
-            fetchPlayers() // Revert on error
+            fetchAllianceAndPlayers() // Revert on error
         }
     }
 
