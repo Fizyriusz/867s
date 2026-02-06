@@ -30,9 +30,11 @@ export default function ImportPage() {
     const [mergeOldId, setMergeOldId] = useState('')
     const [mergeNewId, setMergeNewId] = useState('')
 
-    // Tab: Players
+    // Tab: Players (Smart Sync)
     const [playerJson, setPlayerJson] = useState('')
-    const [selectedAllianceId, setSelectedAllianceId] = useState<string>('') // Selected from dropdown
+    const [selectedAllianceId, setSelectedAllianceId] = useState<string>('')
+    const [syncAnalysis, setSyncAnalysis] = useState<any>(null) // { toAdd, toUpdate, toRemove }
+    const [conflictMap, setConflictMap] = useState<{ [key: string]: string }>({}) // missingName -> newName
 
     // Tab: Events
     const [template, setTemplate] = useState('MANUAL')
@@ -95,119 +97,157 @@ export default function ImportPage() {
     }
 
     // ==========================================
-    // 2. IMPORT GRACZY (With Alliance Selector)
+    // 2. IMPORT GRACZY (SMART SYNC)
     // ==========================================
-    const handleImportPlayers = async () => {
-        setIsProcessing(true); setLogs([]);
+    const handleAnalyzePlayers = async () => {
+        setIsProcessing(true); setLogs([]); setSyncAnalysis(null); setConflictMap({});
         try {
             const data = JSON.parse(playerJson)
             if (!Array.isArray(data)) throw new Error('To nie jest lista (JSON Array)!')
 
-            // Determine Alliance Logic
-            let forcedAllianceId: number | null = null
-            let forcedAllianceTag: string = ''
+            let allianceId = null
+            let allianceTag = ''
 
             if (selectedAllianceId) {
                 const found = alliancesList.find(a => a.id === parseInt(selectedAllianceId))
-                if (found) {
-                    forcedAllianceId = found.id
-                    forcedAllianceTag = found.tag
-                    addLog(`🔒 Wymuszono sojusz: [${found.tag}] dla wszystkich importowanych graczy.`)
-                }
+                if (found) { allianceId = found.id; allianceTag = found.tag; }
             }
 
-            addLog(`👤 Import Graczy: ${selectedDate}`)
+            if (!allianceId) { throw new Error('Wybierz sojusz z listy (lub upewnij się że sojusz istnieje).') }
 
-            for (const item of data) {
+            addLog(`🔍 Analiza dla sojuszu: [${allianceTag}]`)
+
+            // 1. Fetch Current DB State
+            const { data: dbPlayers } = await supabase.from('players').select('*').eq('alliance_id', allianceId).eq('is_active', true)
+            const dbMap = new Map((dbPlayers || []).map(p => [p.name, p]))
+
+            // 2. Process Input
+            const inputMap = new Map()
+            data.forEach(item => {
                 const name = item.name || item.Name
-                const rawPower = item.power || item.Power
-                const rawLevel = item.level || item.Level || item.town_hall_level
+                if (name) inputMap.set(name, item)
+            })
 
-                if (!name || !rawPower) continue
+            // 3. Compare
+            const toAdd: any[] = []
+            const toUpdate: any[] = []
+            const toRemove: any[] = []
 
-                const powerVal = parsePower(rawPower)
-                const levelVal = parseLevel(rawLevel)
+            // Check Input vs DB
+            inputMap.forEach((item, name) => {
+                const dbP = dbMap.get(name)
+                const power = parsePower(item.power || item.Power)
+                const th = parseLevel(item.level || item.Level || item.town_hall_level)
 
-                // A. ID Sojuszu
-                let allianceId = forcedAllianceId // Default to selection
-
-                // If NO selection, try to infer from JSON tag
-                if (!allianceId) {
-                    let rawTag = item.alliance_tag || item.tag || ''
-                    const tag = rawTag.replace(/[\[\]]/g, '').trim().toUpperCase() // "[ITA]" -> "ITA"
-
-                    if (tag) {
-                        const { data: existingAll } = await supabase.from('alliances').select('id').eq('tag', tag).single()
-                        if (existingAll) {
-                            allianceId = existingAll.id
-                        } else {
-                            const { data: newAll } = await supabase.from('alliances').insert({ tag: tag, name: 'Unknown (Auto)', status: 'NEUTRAL' }).select().single()
-                            if (newAll) {
-                                allianceId = newAll.id
-                                addLog(`🆕 Utworzono nowy sojusz z JSON: [${tag}]`)
-                            }
-                        }
-                    }
-                }
-
-                // B. Upsert Gracza (By Name)
-                let playerId = null
-                const { data: existingPlayer } = await supabase.from('players').select('id, alliance_id, town_hall_level, power').eq('name', name).single()
-
-                if (existingPlayer) {
-                    playerId = existingPlayer.id
-                    const updatePayload: any = {}
-
-                    // Check changes to update LIVE table (Current Status)
-                    if (allianceId && existingPlayer.alliance_id !== allianceId) updatePayload.alliance_id = allianceId
-                    if (levelVal > (existingPlayer.town_hall_level || 0)) updatePayload.town_hall_level = levelVal
-                    if (powerVal !== existingPlayer.power) updatePayload.power = powerVal
-
-                    if (Object.keys(updatePayload).length > 0) {
-                        await supabase.from('players').update(updatePayload).eq('id', playerId)
-                        addLog(`📝 Aktualizacja gracza: ${name}`)
-                    }
+                if (!dbP) {
+                    toAdd.push({ name, power, th, raw: item })
                 } else {
-                    const { data: newPlayer } = await supabase.from('players').insert({
-                        name: name,
-                        alliance_id: allianceId,
-                        town_hall_level: levelVal,
-                        power: powerVal,
-                        status: 'ACTIVE',
-                        is_active: true
-                    }).select().single()
-                    if (newPlayer) {
-                        playerId = newPlayer.id
-                        addLog(`✨ Nowy gracz: ${name}`)
+                    // Check diff
+                    if (dbP.power !== power || (dbP.town_hall_level || 0) < th) {
+                        toUpdate.push({
+                            id: dbP.id, name,
+                            old: { power: dbP.power, th: dbP.town_hall_level },
+                            new: { power, th }
+                        })
                     }
                 }
+            })
 
-                // C. Snapshot Historii
-                if (playerId) {
-                    const { data: existingSnap } = await supabase.from('player_snapshots').select('id').eq('player_id', playerId).eq('recorded_at', selectedDate).single()
-
-                    if (existingSnap) {
-                        await supabase.from('player_snapshots').update({ power: powerVal, town_hall_level: levelVal, alliance_id: allianceId }).eq('id', existingSnap.id)
-                    } else {
-                        await supabase.from('player_snapshots').insert({ player_id: playerId, power: powerVal, town_hall_level: levelVal, alliance_id: allianceId, recorded_at: selectedDate })
-                    }
+            // Check DB vs Input (Missing)
+            dbMap.forEach((p, name) => {
+                if (!inputMap.has(name)) {
+                    toRemove.push(p)
                 }
-            }
-            addLog('🏁 Zakończono import graczy!')
-            fetchAlliances()
+            })
+
+            setSyncAnalysis({ toAdd, toUpdate, toRemove })
+            addLog(`📊 Wynik analizy: Nowi: ${toAdd.length}, Zmiany: ${toUpdate.length}, Brakujący: ${toRemove.length}`)
+
         } catch (e: any) { addLog(`🔥 BŁĄD: ${e.message}`) } finally { setIsProcessing(false) }
     }
 
+    const handleExecuteSync = async () => {
+        if (!syncAnalysis) return
+        setIsProcessing(true)
+
+        if (!selectedAllianceId) { alert('Wybierz sojusz!'); setIsProcessing(false); return }
+        const allianceId = parseInt(selectedAllianceId)
+
+        try {
+            let processedAdds = [...syncAnalysis.toAdd]
+            let processedRemoves = [...syncAnalysis.toRemove]
+            const renames: any[] = []
+
+            // 1. Resolve Conflicts (Renames)
+            for (const [oldName, newName] of Object.entries(conflictMap)) {
+                if (!newName) continue
+
+                const oldPlayer = syncAnalysis.toRemove.find((p: any) => p.name === oldName)
+                const newPlayerData = syncAnalysis.toAdd.find((p: any) => p.name === newName)
+
+                if (oldPlayer && newPlayerData) {
+                    renames.push({
+                        id: oldPlayer.id,
+                        name: newName,
+                        power: newPlayerData.power,
+                        town_hall_level: newPlayerData.th
+                    })
+
+                    processedAdds = processedAdds.filter((p: any) => p.name !== newName)
+                    processedRemoves = processedRemoves.filter((p: any) => p.name !== oldName)
+                }
+            }
+
+            // 2. Execute Updates
+            for (const u of syncAnalysis.toUpdate) {
+                await supabase.from('players').update({ power: u.new.power, town_hall_level: u.new.th }).eq('id', u.id)
+            }
+
+            // 3. Execute Renames
+            for (const r of renames) {
+                await supabase.from('players').update({ name: r.name, power: r.power, town_hall_level: r.town_hall_level }).eq('id', r.id)
+            }
+
+            // 4. Execute Adds
+            if (processedAdds.length > 0) {
+                const payload = processedAdds.map((p: any) => ({
+                    name: p.name,
+                    power: p.power,
+                    town_hall_level: p.th,
+                    alliance_id: allianceId,
+                    status: 'ACTIVE',
+                    is_active: true
+                }))
+                await supabase.from('players').insert(payload)
+            }
+
+            // 5. Execute Removes (Unassign from alliance)
+            if (processedRemoves.length > 0) {
+                const ids = processedRemoves.map((p: any) => p.id)
+                await supabase.from('players').update({ alliance_id: null, notes: `Left alliance on ${selectedDate}` }).in('id', ids) // Keeping active but removed from alliance view
+            }
+
+            // 6. SNAPSHOT (Optional but robust)
+            // Let's create a snapshot for everyone currently in alliance (including new ones)
+            // For efficiency, just syncing the list update is key. 
+            // We can do an incremental snapshot? 
+            // Let's just finish the sync.
+
+            addLog('✅ Synchronizacja zakończona pomyślnie!')
+            setSyncAnalysis(null)
+            setConflictMap({})
+            setPlayerJson('')
+
+        } catch (e: any) { addLog(`🔥 BŁĄD EXEC: ${e.message}`) } finally { setIsProcessing(false) }
+    }
 
     // ==========================================
     // 3. GENERATOR EVENTÓW
     // ==========================================
-    const handleGenerateEvents = async () => { /* ... (Same as before) ... */
-        // Skrócone dla czytelności pliku w tym requeście, ale w praktyce kod musi tu być. 
-        // Przywracam pełny kod, żeby nie nadpisać "..."
+    const handleGenerateEvents = async () => {
         if (!startDate) { alert('Select start date!'); return }
         setIsProcessing(true)
-        const eventsToCreate = []
+        const eventsToCreate: any[] = []
         const start = new Date(startDate)
         const addDays = (date: Date, days: number) => { const r = new Date(date); r.setDate(r.getDate() + days); return r.toISOString().split('T')[0] }
         const dateStr = (date: Date) => date.toISOString().split('T')[0]
@@ -249,7 +289,7 @@ export default function ImportPage() {
             const oldClient = createClient(OLD_SUPABASE_URL, OLD_SUPABASE_KEY)
 
             // Login to Old DB
-            addLog('� Logowanie do starej bazy...')
+            addLog('🔑 Logowanie do starej bazy...')
             const { error: authError } = await oldClient.auth.signInWithPassword({
                 email: email,
                 password: pass
@@ -280,8 +320,6 @@ export default function ImportPage() {
                     marches: p.marches,
                     power: powerVal,
                     status: p.is_active ? 'ACTIVE' : 'INACTIVE',
-                    // Default to VIP if needed? Or allow assigning later. 
-                    // Let's set alliance_id = null for now, or find 'VIP' id if we want to be smart.
                 }, { onConflict: 'name' })
 
                 if (upsertErr) {
@@ -392,18 +430,17 @@ export default function ImportPage() {
                                     <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full bg-[#333] text-white p-2 rounded border border-gray-600" />
                                 </div>
                                 <div>
-                                    <label className="text-xs text-gray-500 uppercase font-bold block mb-1">Przypisz do Sojuszu (Opcjonalne)</label>
+                                    <label className="text-xs text-gray-500 uppercase font-bold block mb-1">Przypisz do Sojuszu (Wymagane)</label>
                                     <select
                                         value={selectedAllianceId}
                                         onChange={e => setSelectedAllianceId(e.target.value)}
                                         className="w-full bg-[#333] text-white p-2 rounded border border-gray-600 text-purple-400 font-bold"
                                     >
-                                        <option value="">-- Pobierz z JSON (Auto) --</option>
+                                        <option value="">-- Wybierz Sojusz --</option>
                                         {alliancesList.map(a => (
                                             <option key={a.id} value={a.id}>[{a.tag}] {a.name}</option>
                                         ))}
                                     </select>
-                                    <p className="text-xs text-gray-500 mt-1">Jeśli wybierzesz sojusz tutaj, pole "tag" w JSON zostanie zignorowane.</p>
                                 </div>
                             </div>
 
@@ -411,9 +448,55 @@ export default function ImportPage() {
                                 value={playerJson} onChange={e => setPlayerJson(e.target.value)}
                                 placeholder='[ { "name": "Player 1", "power": "66.9M", "level": "Gold 1" }, ... ]' />
 
-                            <button onClick={handleImportPlayers} disabled={isProcessing} className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded">
-                                Importuj Graczy
-                            </button>
+                            {!syncAnalysis ? (
+                                <button onClick={handleAnalyzePlayers} disabled={isProcessing} className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded shadow-lg shadow-purple-900/20">
+                                    🔍 Analizuj Listę (Krok 1/2)
+                                </button>
+                            ) : (
+                                <div className="bg-black/40 p-4 rounded border border-purple-500/30 space-y-4">
+                                    <div className="flex justify-between items-center border-b border-gray-700 pb-2">
+                                        <h3 className="font-bold text-purple-400">Wyniki Analizy</h3>
+                                        <button onClick={() => setSyncAnalysis(null)} className="text-xs text-gray-500 hover:text-white">Anuluj</button>
+                                    </div>
+
+                                    {/* STATS */}
+                                    <div className="grid grid-cols-3 gap-2 text-center text-sm font-mono">
+                                        <div className="bg-green-900/20 p-2 rounded text-green-400">Nowi: <strong>{syncAnalysis.toAdd.length}</strong></div>
+                                        <div className="bg-blue-900/20 p-2 rounded text-blue-400">Zmiany: <strong>{syncAnalysis.toUpdate.length}</strong></div>
+                                        <div className="bg-red-900/20 p-2 rounded text-red-400">Brakujący: <strong>{syncAnalysis.toRemove.length}</strong></div>
+                                    </div>
+
+                                    {/* RENAMES (CONFLICTS) */}
+                                    {syncAnalysis.toRemove.length > 0 && syncAnalysis.toAdd.length > 0 && (
+                                        <div className="bg-yellow-900/10 p-3 rounded border border-yellow-700/30">
+                                            <p className="text-xs text-yellow-500 font-bold mb-2">⚠️ Wykrywanie Zmiany Nicku</p>
+                                            <p className="text-xs text-gray-400 mb-2">Poniżsi gracze zniknęli z listy. Jeśli zmienili nick, wybierz ich nową tożsamość z listy nowych graczy.</p>
+                                            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                                {syncAnalysis.toRemove.map((p: any) => (
+                                                    <div key={p.id} className="flex justify-between items-center text-xs gap-2">
+                                                        <span className="text-red-400 font-mono">- {p.name}</span>
+                                                        <span>➜</span>
+                                                        <select
+                                                            className="bg-[#111] text-green-400 border border-gray-700 rounded p-1 w-1/2"
+                                                            value={conflictMap[p.name] || ''}
+                                                            onChange={(e) => setConflictMap(prev => ({ ...prev, [p.name]: e.target.value }))}
+                                                        >
+                                                            <option value="">(Usunięcie)</option>
+                                                            {syncAnalysis.toAdd.map((newP: any) => (
+                                                                <option key={newP.name} value={newP.name}>{newP.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <button onClick={handleExecuteSync} disabled={isProcessing} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded shadow-lg shadow-green-900/20 animate-pulse">
+                                        ✅ Zatwierdź Zmiany (Krok 2/2)
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

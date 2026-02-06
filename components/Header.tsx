@@ -44,20 +44,15 @@ export default function Header() {
         <button
           onClick={handleLoginAction}
           className={`px-3 py-2 rounded font-mono text-sm border transition-colors mr-2 ${isAdmin ? 'bg-purple-900/30 text-purple-400 border-purple-800' :
-              isRecruiterOrHigher ? 'bg-green-900/30 text-green-400 border-green-800' :
-                'bg-red-900/10 text-red-500/50 border-red-900/30'
+            isRecruiterOrHigher ? 'bg-green-900/30 text-green-400 border-green-800' :
+              'bg-red-900/10 text-red-500/50 border-red-900/30'
             }`}
           title={user ? `Zalogowany: ${role}` : "Zaloguj się"}
         >
           {isAdmin ? '👑' : (isRecruiterOrHigher ? '🏹' : '🔒')}
         </button>
 
-        <button
-          onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')}
-          className="bg-[#333] hover:bg-[#444] text-white px-3 py-2 rounded font-mono text-sm border border-gray-600 transition-colors mr-2"
-        >
-          {lang === 'pl' ? '🇬🇧 EN' : '🇵🇱 PL'}
-        </button>
+
 
         {pathname !== '/' && (
           <Link href="/" className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
@@ -91,8 +86,8 @@ export default function Header() {
           </Link>
         )}
 
-        {/* IMPORT: Widoczny TYLKO DLA ADMINA */}
-        {isAdmin && pathname !== '/import' && (
+        {/* IMPORT: Widoczny dla Admina i Rekrutera */}
+        {isRecruiterOrHigher && pathname !== '/import' && (
           <Link href="/import" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm transition-colors flex items-center gap-2">
             <span>📥</span> {t('nav.import')}
           </Link>

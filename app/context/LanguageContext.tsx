@@ -12,24 +12,14 @@ type LanguageContextType = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Domyślnie PL
-  const [lang, setLangState] = useState<Lang>('pl')
-
-  // Zapamiętywanie wyboru w przeglądarce
-  useEffect(() => {
-    const saved = localStorage.getItem('app-lang') as Lang
-    if (saved) setLangState(saved)
-  }, [])
-
-  const setLang = (newLang: Lang) => {
-    setLangState(newLang)
-    localStorage.setItem('app-lang', newLang)
-  }
+  // Hardcoded to EN
+  const lang: Lang = 'en'
+  const setLang = (newLang: Lang) => { } // No-op
 
   // Funkcja tłumacząca: t('app.title') -> "867's HQ"
   const t = (key: string) => {
     // @ts-ignore
-    return translations[lang][key] || key 
+    return translations[lang][key] || key
   }
 
   return (
