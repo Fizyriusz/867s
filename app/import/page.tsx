@@ -237,8 +237,9 @@ export default function ImportPage() {
     // ==========================================
     // 4. MIGRATION TOOL (From Old DB)
     // ==========================================
-    const handleMigration = async () => {
+    const handleMigration = async (email?: string, pass?: string) => {
         if (!confirm('Czy na pewno chcesz pobrać dane ze STAREJ bazy i wrzucić do NOWEJ?')) return
+        if (!email || !pass) { alert('Podaj email i hasło do starej bazy!'); return }
 
         setIsProcessing(true); setLogs([]);
         addLog('🚀 Rozpoczynam migrację...')
@@ -247,28 +248,30 @@ export default function ImportPage() {
             // Init Old Client
             const oldClient = createClient(OLD_SUPABASE_URL, OLD_SUPABASE_KEY)
 
+            // Login to Old DB
+            addLog('� Logowanie do starej bazy...')
+            const { error: authError } = await oldClient.auth.signInWithPassword({
+                email: email,
+                password: pass
+            })
+
+            if (authError) throw new Error(`Błąd logowania: ${authError.message}`)
+            addLog('✅ Zalogowano pomyślnie!')
+
             // --- 1. GRACZE ---
             addLog('📥 Pobieram starych graczy...')
             const { data: oldPlayers, error: oldErr } = await oldClient.from('players').select('*')
 
             if (oldErr) throw oldErr
-            if (!oldPlayers) throw new Error('No players found in old DB')
+            if (!oldPlayers || oldPlayers.length === 0) throw new Error('Nie znaleziono żadnych graczy w starej tabeli "players" (lub RLS blokuje dostęp).')
 
             addLog(`Znaleziono ${oldPlayers.length} graczy. Przetwarzam...`)
 
-            // Prepare Payload
-            // Map tags from old DB? Old DB didn't seem to have alliance_id foreign key, it had 'alliance_tag' maybe? 
-            // Image 1 shows 'id', 'name', 'is_active', 'notes', 'th_level', 'marches', 'power_level'. No alliance_id column visible in screenshot.
-            // Assuming user wants to keep them 'Unassigned' or we need to look for tags in names/notes?
-            // Let's assume they are imported without alliance for now, OR we check if 'tag' exists in some other table.
-            // Wait, 'kingshot-hq' code might hint.
-            // In Image 0, there is NO 'alliances' table.
-
+            let importedCount = 0;
             for (const p of oldPlayers) {
                 const powerVal = parsePower(p.power_level)
 
                 // Upsert to new DB
-                // We match by NAME.
                 const { error: upsertErr } = await supabase.from('players').upsert({
                     name: p.name,
                     is_active: p.is_active,
@@ -276,19 +279,23 @@ export default function ImportPage() {
                     town_hall_level: p.th_level,
                     marches: p.marches,
                     power: powerVal,
-                    // Alliance ID unknown, leaving null
-                    status: p.is_active ? 'ACTIVE' : 'INACTIVE'
+                    status: p.is_active ? 'ACTIVE' : 'INACTIVE',
+                    // Default to VIP if needed? Or allow assigning later. 
+                    // Let's set alliance_id = null for now, or find 'VIP' id if we want to be smart.
                 }, { onConflict: 'name' })
 
-                if (upsertErr) console.error('Upsert err:', upsertErr)
+                if (upsertErr) {
+                    console.error('Upsert err:', upsertErr)
+                    addLog(`❌ Błąd przy graczu ${p.name}: ${upsertErr.message}`)
+                } else {
+                    importedCount++;
+                }
             }
-            addLog('✅ Gracze zmigrowani!')
-
-            // --- 2. EVENTS ---
-            // TODO if needed
+            addLog(`✅ Gracze zmigrowani! (${importedCount}/${oldPlayers.length})`)
 
         } catch (e: any) {
             addLog(`🔥 BŁĄD MIGRACJI: ${e.message}`)
+            console.error(e)
         } finally {
             setIsProcessing(false)
         }
@@ -441,21 +448,39 @@ export default function ImportPage() {
                         <div className="bg-green-900/10 border border-green-500/30 p-6 rounded-xl">
                             <h2 className="text-green-400 font-bold text-xl mb-4">♻️ Migracja ze Starej Bazy</h2>
                             <p className="text-gray-400 mb-6">
-                                To narzędzie połączy się z Twoją starą bazą (kingshot-hq) i pobierze listę wszystkich graczy,
-                                przepisując ich moc, TH level oraz notatki do nowej bazy.
-                                <br /><br />
-                                <strong>Uwaga:</strong> Gracze zostaną zmigrowani bez przypisania do sojuszu (chyba że dodasz logikę mapowania po nazwach).
+                                To narzędzie połączy się z Twoją starą bazą (kingshot-hq) i pobierze listę graczy.
+                                <br />
+                                <strong>Wymagane logowanie:</strong> Jeśli stara baza ma włączone zabezpieczenia RLS (a ma), musisz podać dane logowania do starego konta (Admina/Oficera ze starej appki), aby móc pobrać dane.
                             </p>
 
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <input
+                                    type="email"
+                                    placeholder="Email do starej bazy (np. admin@kingshot.pl)"
+                                    className="bg-[#333] border border-gray-600 rounded p-3 text-white"
+                                    id="old-email"
+                                />
+                                <input
+                                    type="password"
+                                    placeholder="Hasło do starej bazy"
+                                    className="bg-[#333] border border-gray-600 rounded p-3 text-white"
+                                    id="old-pass"
+                                />
+                            </div>
+
                             <button
-                                onClick={handleMigration}
+                                onClick={() => {
+                                    const email = (document.getElementById('old-email') as HTMLInputElement).value
+                                    const pass = (document.getElementById('old-pass') as HTMLInputElement).value
+                                    handleMigration(email, pass)
+                                }}
                                 disabled={isProcessing}
                                 className="w-full py-4 bg-green-700 hover:bg-green-600 text-white font-bold rounded shadow-lg shadow-green-900/50 text-xl"
                             >
-                                {isProcessing ? 'Pracuję...' : 'START MIGRACJI'}
+                                {isProcessing ? 'Pracuję...' : 'ZALOGUJ I MIGRUJ DANE'}
                             </button>
 
-                            <div className="mt-4 p-4 bg-black/30 rounded text-xs text-gray-500 font-mono text-center">
+                            <div className="mt-4 p-4 bg-black/30 rounded text-xs text-gray-500 font-mono text-center break-all">
                                 Source: {OLD_SUPABASE_URL}
                             </div>
                         </div>
